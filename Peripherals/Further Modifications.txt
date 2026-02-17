@@ -1,0 +1,1 @@
+Add a Filter by Date in Dashboard Analytics like only a included in analytics either all data or based on 1 year(dropdown which has value of year based on what years are registered in the system)
