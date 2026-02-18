@@ -1,1 +1,19 @@
-Add a Filter by Date in Dashboard Analytics like only a included in analytics either all data or based on 1 year(dropdown which has value of year based on what years are registered in the system)
+- brighten the calendar icon color in Dates in Monitoring Process and expand the calendar input
+- Export Button should have function by clicking it appears Filter Modal then the Structure of Headers and Values, then Export Button should only appears in SVP Records and Regular Bidding only
+- Make the Sidebar Navigation for SVP into Small Value Procurement
+- Remove the Export Button in the Dashboard
+- After i type a zero on the Date input it loss the focus on the input
+- SVP ABC and Bidding Amount input placeholders should be below 1 million why in Regular bidding should be above 1 million
+- after i check the process upto 3 process and uncheck the 1st process the 2 next process still checked fix that part that it should loss the checked
+- remove the other Types values other than SVP and Regular Bidding
+- in Edit Modal specifically the Location Section add the transition of storage or switching of storage option if ever the record is currently in drawer i want to switch it in box storage and vice versa
+- also in Edit Modal make the Date Added input should be editable
+- Attached Documents Checklist in the Edit Modal isnt reflecting in the Progress Tracking Attached Checklist Modal or should be sync the data display
+- make the Dashboard Displayed Values in Charts in a nice UI Design and add a tooltip on the Top Drawer by Files Bar chart
+- Add a Text "Clear Filters" button in Procurement List Page
+- Remove Status Legend button icon above 
+- Add Division Record delete prevention that it cant delete if there are records from that Division, also add a column where it display total files registered from that division as PR Number and another column for End User
+- SVP ABC and Bid Amount should have prevention that only below 1 Million can input same on the Regular Bidding should above 1 Million Values
+- in All Boxes and All Drawers Dropdown Filter should have conditional disabling that if Box was selected values then Drawers and Cabinets dropdowns should be disable and when 
+- The files that display inside the Folder in the Visual Allocation should be in order of displaying based on its Stack Number
+- on the User Management if account was deleted that account where it log ins should be instantly log out or prompts that your account is force deleted then option ok then it will be logged out on that device
