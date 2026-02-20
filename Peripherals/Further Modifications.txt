@@ -1,19 +1,334 @@
-- brighten the calendar icon color in Dates in Monitoring Process and expand the calendar input
+- brighten or change the calendar icon color into white so that it is visible in Dates in Monitoring Process Page, Edit Modal and Add Procurement Page
+
+- turn back the previous input structure for the dates into typable in Monitoring Process Page, Edit Modal and Add Procurement Page
+- make the legends on the Top Drawer by Files Bar chart into bottom of the chart, and make the values for each charts and graphs inside its bar or donut chart part
+- for the Storage Hierarchy Overview bar charts dont include displaying the boxes
+- After i type a zero on the Date input it loss the focus on the input(implement this after you implement the first part of this list of modifications specically that turn back for date structure
+
+
+
+
+
+
+
+
+
+Re arrange the order of appearing the Attached documents checklist in Add Procurement Page into A-K on first column and L-Q on second column
+Re arrange also the order for monitoring progress where it specifically only the Regular Bidding into this:
+
+	Received PR to Action(Date)
+	PR Delibirated(Date)
+	Published(Date)
+	Pre-Bid(Date)
+	Bid Opening(Date)
+	Bid Evauation Report(Date)
+	Post Qualification(Date)
+	Post Qualification Report(Date)
+	Forwarded to OAPIA(Date)
+	Notice of Award(Date)
+	Contract Date(Date)
+	Notice to Proceed(Date)
+	Awarded to Supplier(Date)
+
+where the Forwarded to OAPIA should be after Post Qualification Report
+
+- on the User Management if account was deleted that account where it log ins should be instantly log out or prompts that your account is force deleted then option ok then it will be logged out on that device
 - Export Button should have function by clicking it appears Filter Modal then the Structure of Headers and Values, then Export Button should only appears in SVP Records and Regular Bidding only
+
+
+
+
+make the export structure for records into
+
+SVP:
+Particulars/Project name
+PR Number
+End User
+ABC
+Status
+Date of Current Status/Progress
+Remarks
+Progress:
+	Received PR to Action(Date)
+	PR Delibirated(Date)
+	Published(Date)
+	RFQ to Canvass(Date)
+	RFQ Opening(Date)
+	BAC Resolution(Date)
+	Forwarded to GSD for P.O(Date)
+	Staff in Charge
+Supplier
+Bid Amount
+Notes
+Attached Documents Checklist:
+	A.
+	B.	
+	C.
+	D.
+	E.
+	F.
+	G.
+	H.
+	I.
+	J.
+	K.
+	L.
+	M.
+	N.
+	O.1.
+	O.2.
+	O.3.
+	O.4.
+	P.1.
+	P.2.
+	P.3.
+	Q.
+Date Added
+
+
+Regular Bidding:
+SVP:
+Particulars/Project name
+PR Number
+End User
+ABC
+Status
+Date of Current Status/Progress
+Remarks
+Progress:
+	Received PR to Action(Date)
+	PR Delibirated(Date)
+	Published(Date)
+	Pre-Bid(Date)
+	Bid Opening(Date)
+	Bid Evauation Report(Date)
+	Post Qualification(Date)
+	Post Qualification Report(Date)
+	Forwarded to OAPIA(Date)
+	Notice of Award(Date)
+	Contract Date(Date)
+	Notice to Proceed(Date)
+	Awarded to Supplier(Date)	
+Staff in Charge
+Supplier
+Bid Amount
+Notes
+Attached Documents Checklist:
+	A.
+	B.	
+	C.
+	D.
+	E.
+	F.
+	G.
+	H.
+	I.
+	J.
+	K.
+	L.
+	M.
+	N.
+	O.1.
+	O.2.
+	O.3.
+	O.4.
+	P.1.
+	P.2.
+	P.3.
+	Q.
+Date Added
+
+
+
+
+create a File Tracking System with Storage Allocation and Procurement Progress Monitoring Internal Tool with this all context. implement it using google sheets worksheets and good appscript
+
+Pages(WorkSheets and Forms):
+- Data Visualization:
+	- Dashboard Analytics
+	- Procurement Progress Monitoring
+- Forms:
+	- Add Box(Main Storage 1)
+	- Add Drawer(Main Storage 2)
+	- Add Cabinet(Secondary Storage)
+	- Add Folder(Tertiary Storage)
+	- Add Procurement(File)
+- List/Records:
+	- Small Value Procurement Records
+	- Regular Bidding Records
+
+
+
+Storage Hierarchy Design:
+	- D1-C1-F1(Drawer -> Cabinet -> Folder -> Files)
+	- B1-F1(Box -> Folder -> Files)
+
+
+File Progress per Type:
+
+SVP Monitoring Process of Procurement:
+	- Received PR for Action
+	- PR Deliberated
+	- Published
+	- RFQ for Canvass
+	- RFQ Opening
+	- BAC Resolution
+	- Forwarded GSD for P.O.
+
+Regular Bidding Monitoring Process of Procurement
+	- Received PR for Action
+	- PR Deliberated
+	- Published
+	- Pre-bid
+	- Bid Opening
+	- Bid Evaluation Report
+	- Add BAC Resolution
+	- Post-Qualification)
+	- Post-Qualification Report
+	- Forwareded to OAPIA
+	- NOA
+	- Contract Date
+	- NTP
+	- Awarded to (Supplier Name)
+
+
+Form Inputs per Types:
+
+Small Value Procurement Form:
+Particulars <- Project Title
+PR No.(Dont reflect the Division or End User since End user and PR No. Division abbreviation is not the same)
+End User <- Division
+Add ABC(Pesos)
+Status(Completed, In Progress, Returned PR to EU, Not yet Acted, Failure, Cancelled)
+Add Date Status Updated
+Remarks <- Description
+Monitoring Process of Procurement(Checkbox and Record Date ask date before confirmation of process)
+	- Add Received PR for Action(Date)
+	- Add PR Deliberated(Date)
+	- Published <- Procurement Date
+	- Add RFQ for Canvass(Date)
+	- Add RFQ Opening(Date)
+	- Add BAC Resolution(Date)
+	- Add Forwarded GSD for P.O.(Date)
+Staff Incharge <- Person Modified or Created
+Add Supplier
+Bid Amount
+Notes(Text Description)
+
+Regular Bidding(Above 1M) Form:
+Particulars <- Project Title
+PR No.(Dont reflect the Division or End User since End user and PR No. Division abbreviation is not the same)
+End User <- Division
+Add ABC(Pesos)
+Status(Completed, In Progress, Returned PR to EU, Not yet Acted, Failure, Cancelled)
+Add Date Status Updated
+Remarks <- Description
+Monitoring Process of Procurement(Checkbox and Record Date ask date before confirmation of process)
+	- Add Received PR for Action(Date)
+	- Add PR Deliberated(Date)
+	- Published(Date) <- Procurement Date
+	- Pre-bid(Date)
+	- Bid Opening(Date)
+	- Bid Evaluation Report(Date)
+	- Add BAC Resolution(Date)
+	- Post-Qualification(Date)
+	- Post-Qualification Report
+	- Forwareded to OAPIA(Date)
+	- NOA(Date)
+	- Contract Date(Date)
+	- NTP(Date)
+	- Awarded to(Supplier Name)
+Staff Incharge <- Person Modified or Created
+Add Supplier
+Bid Amount
+Notes(Text Description)
+
+
+Attached Documets Checklist:
+const checklistItems = [
+    { key: 'noticeToProceed', label: 'A. Notice to Proceed' },
+    { key: 'biddersTechFinancialProposals', label: 'L. Bidders Technical and Financial Proposals' },
+    { key: 'contractOfAgreement', label: 'B. Contract of Agreement' },
+    { key: 'minutesPreBid', label: 'M. Minutes of Pre-Bid Conference' },
+    { key: 'noticeOfAward', label: 'C. Notice of Award' },
+    { key: 'biddingDocuments', label: 'N. Bidding Documents' },
+    { key: 'bacResolutionAward', label: 'D. BAC Resolution to Award' },
+    { key: 'inviteObservers', label: 'O.1. Letter Invitation to Observers' },
+    { key: 'postQualReport', label: 'E. Post-Qual Evaulation Report' },
+    { key: 'officialReceipt', label: 'O.2. Official Receipt' },
+    { key: 'noticePostQual', label: 'F. Notice of Post-qualification' },
+    { key: 'boardResolution', label: 'O.3. Board Resolution' },
+    { key: 'bacResolutionPostQual', label: 'G. BAC Resolution to Post-qualify' },
+    { key: 'philgepsAwardNotice', label: 'O.4. PhilGEPS Award Notice Abstract' },
+    { key: 'abstractBidsEvaluated', label: 'H. Abstract of Bids as Evaluated' },
+    { key: 'philgepsPosting', label: 'P.1. PhilGEPS Posting' },
+    { key: 'twgBidEvalReport', label: 'I. TWG Bid Evaluation Report' },
+    { key: 'websitePosting', label: 'P.2. Website Posting' },
+    { key: 'minutesBidOpening', label: 'J. Minutes of Bid Opening' },
+    { key: 'postingCertificate', label: 'P.3. Posting Certificate' },
+    { key: 'resultEligibilityCheck', label: 'K. Eligibility Check Results' },
+    { key: 'fundsAvailability', label: 'Q. CAF, PR, TOR & APP' },
+];
+
+
+
+
+
+
+
+
+
+Done:
+
+- in Visual Allocation Map Page files view modal should include its procurement progress just like the Records appeared in Progress Tracking Page and for each files make the order of files in Stack number but in a descending order like 5,4,3,2,1
+- SVP ABC and Bid Amount should have prevention that only below 1 Million can input same on the Regular Bidding should above 1 Million Values or limit the SVP ABC and Bid amount into 6 digits numbers like 999,999 while in Regular Bidding it should be upto 7 digits numbers like 1,000,000,000 and if the focus loss on this input with just below 7 digits numbers it will appear a toast that the ABC or Bid Amount should atleast or above 1,000,000,000 and also prevent on submission
+- Attached Documents Checklist in the Edit Modal isnt reflecting in the Progress Tracking Attached Checklist Modal or should be sync the data display
+- remove the other Types values other than SVP and Regular Bidding
 - Make the Sidebar Navigation for SVP into Small Value Procurement
 - Remove the Export Button in the Dashboard
-- After i type a zero on the Date input it loss the focus on the input
 - SVP ABC and Bidding Amount input placeholders should be below 1 million why in Regular bidding should be above 1 million
-- after i check the process upto 3 process and uncheck the 1st process the 2 next process still checked fix that part that it should loss the checked
-- remove the other Types values other than SVP and Regular Bidding
 - in Edit Modal specifically the Location Section add the transition of storage or switching of storage option if ever the record is currently in drawer i want to switch it in box storage and vice versa
+- after i check the process upto 3 process and uncheck the 1st process the 2 next process still checked fix that part that it should loss the checked
 - also in Edit Modal make the Date Added input should be editable
-- Attached Documents Checklist in the Edit Modal isnt reflecting in the Progress Tracking Attached Checklist Modal or should be sync the data display
-- make the Dashboard Displayed Values in Charts in a nice UI Design and add a tooltip on the Top Drawer by Files Bar chart
 - Add a Text "Clear Filters" button in Procurement List Page
 - Remove Status Legend button icon above 
-- Add Division Record delete prevention that it cant delete if there are records from that Division, also add a column where it display total files registered from that division as PR Number and another column for End User
-- SVP ABC and Bid Amount should have prevention that only below 1 Million can input same on the Regular Bidding should above 1 Million Values
-- in All Boxes and All Drawers Dropdown Filter should have conditional disabling that if Box was selected values then Drawers and Cabinets dropdowns should be disable and when 
 - The files that display inside the Folder in the Visual Allocation should be in order of displaying based on its Stack Number
 - on the User Management if account was deleted that account where it log ins should be instantly log out or prompts that your account is force deleted then option ok then it will be logged out on that device
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
