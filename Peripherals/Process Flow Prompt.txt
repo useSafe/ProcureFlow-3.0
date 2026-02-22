@@ -1,0 +1,626 @@
+Create a complete web-based interactive visualization of the Government Procurement Process based on Republic Act No. 9184 and Republic Act No. 12009 of the Philippines.
+
+The purpose of this web page is to help new BAC employees understand the full procurement process in a simple and visual way.
+
+The output must include:
+
+HTML
+
+CSS
+
+JavaScript
+
+Smooth animations
+
+Hover effects
+
+Step-by-step progression animation
+
+Do not use external frameworks unless necessary. Pure HTML, CSS, and vanilla JavaScript is preferred.
+
+🎯 OBJECTIVE OF THE WEB PAGE:
+
+The system must visually explain the full procurement process from:
+
+Procurement Planning
+
+Market Research (RA 12009 addition)
+
+Competitive Bidding
+
+Evaluation (LCB / HRB or Value for Money)
+
+Post Qualification
+
+Award and Contract Signing
+
+Project Implementation
+
+Monitoring and Closeout
+
+Alternative Methods
+
+Failure of Bidding
+
+Protest Handling
+
+🎨 DESIGN REQUIREMENTS:
+
+Use a horizontal or vertical process flow diagram.
+
+Each stage must be inside a box or card.
+
+Arrows must connect the steps.
+
+When user clicks “Next Step”, the next box should animate (fade in or slide in).
+
+When user hovers over a box:
+
+The box changes color.
+
+A short explanation tooltip appears.
+
+The explanation must be simple and easy English.
+
+Use soft professional colors (blue, gray, light green).
+
+Make it responsive for desktop and tablet.
+
+Include smooth transition animations (CSS transition or keyframes).
+
+📝 CONTENT REQUIREMENTS (Very Important):
+
+Each step must have:
+
+Title
+
+Short explanation (simple English)
+
+What happens in this stage
+
+Who is responsible (HOPE, BAC, TWG, Secretariat)
+
+What happens if problem occurs
+
+Use simple English explanation like this example style:
+
+Example format for each stage:
+
+Title: Procurement Planning
+Explanation:
+This stage is where the agency identify what they need to buy. The project must be included in the Annual Procurement Plan (APP). If it is not included, it must be amended and approved first.
+
+If problem happens:
+If no budget available, process cannot continue. It must coordinate with Budget Office.
+
+⚙ FUNCTIONALITY REQUIREMENTS:
+
+Add a progress bar on top.
+
+Add "Next" and "Previous" buttons.
+
+Add animated arrows between stages.
+
+Add branching logic animation for:
+
+Failure of bidding
+
+No bidders
+
+Post qualification failed
+
+Protest filed
+
+Alternative procurement
+
+Add highlight animation when showing:
+
+LCB (Lowest Calculated Bid)
+
+HRB (Highest Rated Bid)
+
+Value for Money evaluation (RA 12009)
+
+📚 LEGAL STRUCTURE TO FOLLOW:
+
+Base the flow on:
+
+Republic Act No. 9184:
+
+Competitive bidding structure
+
+LCB and HRB
+
+Post qualification
+
+Failure of bidding
+
+Alternative methods
+
+Bid security and performance security
+
+Republic Act No. 12009:
+
+Strategic procurement planning
+
+Market research
+
+Value for money concept
+
+Digital procurement
+
+Framework agreements
+
+Risk and performance monitoring
+
+💡 EXPLANATION STYLE REQUIREMENT:
+
+Use simple English. Not very fluent. Not too casual.
+
+Example tone:
+
+"This stage is important because BAC must check if bidder is qualified. If bidder fail in post qualification, BAC will go to next ranked bidder. If no more bidder, bidding will be declared failure."
+
+Do not use deep legal terms.
+Make it understandable for new BAC staff.
+
+📦 OUTPUT FORMAT:
+
+Provide:
+
+Complete HTML file
+
+Embedded CSS
+
+Embedded JavaScript
+
+All code in one file
+
+With comments explaining each section
+
+Add comments like:
+
+<!-- Procurement Planning Section -->
+
+// Function to animate next stage
+
+🎯 FINAL GOAL:
+
+The web page must act like an interactive learning tool for new BAC employees to understand the full procurement lifecycle under RA 9184 and RA 12009.
+
+Make it professional, clean, animated, and easy to follow.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Create a web-based interactive BAC procurement learning tool for new employees. The output must be node-based, non-linear, where each node represents a procurement stage.
+
+Requirements
+1️⃣ General Behavior
+
+The screen shows a network of nodes representing all procurement steps.
+
+Nodes are clickable.
+
+When a node is clicked:
+
+The node expands or highlights with smooth animation.
+
+A side panel or popup shows:
+
+Title of step
+
+Explanation (simple English)
+
+Who is responsible (HOPE, BAC, TWG, Secretariat)
+
+What to do if a problem occurs
+
+After clicking, allow step-by-step navigation to next logical nodes.
+
+Include animated focus transition from current node to next node.
+
+Non-linear flow: users can explore nodes in any order but guided navigation available.
+
+2️⃣ Visual & UI Requirements
+
+Node style: rounded rectangles or circles with step number + short title.
+
+Hover effect: node changes color and shows tooltip with brief explanation.
+
+Focus effect: when selected, node enlarges slightly, connected nodes animate in.
+
+Connections: arrows or lines showing relationship between nodes.
+
+Responsive: works on desktop and tablet.
+
+Colors: professional palette (soft blue, light gray, green).
+
+Transitions: smooth animations for node expansion, hover, and step movement.
+
+3️⃣ Content Structure
+Separate Paths:
+
+SVP (Small Value Procurement) Path
+
+Procurement Planning
+
+Approval of APP & Budget
+
+Method Selection
+
+Award & Contract
+
+Implementation & Monitoring
+
+Post-Procurement Review
+
+Regular Bidding Path
+
+Procurement Planning
+
+Market Research (RA 12009)
+
+Advertisement / Posting (PhilGEPS / portal)
+
+Pre-Bid Conference
+
+Submission & Opening of Bids
+
+Preliminary Examination
+
+Detailed Evaluation (LCB/HRB or Value for Money)
+
+Post-Qualification
+
+BAC Resolution & HOPE Approval
+
+Notice of Award & Contract Signing
+
+Project Implementation
+
+Monitoring & Risk Management
+
+Alternative Methods if Failure
+
+Protest Handling
+
+Project Closeout
+
+4️⃣ Functionality Requirements
+
+Click Node: shows full explanation, who does it, and problems handling.
+
+Next/Previous Node Navigation: move step-by-step along recommended path.
+
+Animations:
+
+Node focus transition (zoom or slide)
+
+Connected nodes fade in or move to highlight relation
+
+Tooltip on Hover: simple summary
+
+Problem Handling Pop-up: shows what happens if there is a failure, e.g., failure of bidding, post-qualification failure, protest, etc.
+
+5️⃣ Content Style
+
+Simple English: not too fluent, not too casual
+
+Example:
+
+Title: Post-Qualification
+Explanation: BAC checks if the bidder meets all requirements. If bidder fail, BAC can go to next ranked bidder. If no more bidder, declare failure of bidding.
+Responsible: BAC, TWG
+Problem: Next ranked bidder or alternative procurement.
+
+Each node must include Title, Explanation, Responsible, Problem Handling.
+
+6️⃣ Technical Requirements
+
+Use HTML, CSS, JavaScript (vanilla preferred)
+
+Optional: D3.js or Cytoscape.js for node graph visualization and animation
+
+Node information panel can slide in from side or popup
+
+Smooth transitions on focusing and moving between nodes
+
+All code in one file, with clear comments for each section
+
+Include SVP vs Regular Bidding separation visually (e.g., different colors or lanes)
+
+7️⃣ Learning Goals
+
+Tool should help new BAC staff understand:
+
+Steps in procurement lifecycle
+
+Who is responsible for each stage
+
+What to do in case of problems
+
+Focus on interactive and visual learning
+
+Include RA 9184 and RA 12009 principles where relevant
+
+8️⃣ Output Format
+
+Complete HTML file
+
+Embedded CSS
+
+Embedded JS
+
+Ready-to-run interactive node-based flow
+
+Include example content for both SVP and Regular Bidding nodes
+
+Optional Enhancements:
+
+Add progress bar for recommended path
+
+Include animated arrows when moving to next step
+
+Include node legend for SVP vs Regular Bidding
+
+Highlight RA 12009-specific steps (Market Research, Value for Money, Digital Posting)
+
+Goal:
+
+Create an interactive, educational web tool for BAC staff that is visual, non-linear, animated, and easy to understand, showing all steps of procurement with problem handling and role responsibility.
+
+include line connecting to nodes and turn backs if the node has error and go back to the previous nodes, make it in a full view not includin the title is in fixed top bar. for navigations if the node has next lot of process then i just click the node i want to proceed then by next either it proceed down or go up so i can know and visualize the whole of the nodes in a sequential orders. also you can separate the process of SVP and Regular Bidding. to make it in a more detailed and education web app for new comers on the BAC or knowing the processs even in other division other than BAC. make it like a Draw IO dark UI
+
+
+Attached Documents Checklist:
+A. Notice to Proceed
+B. Contract of Agreement
+C. Notice of Award
+D. BAC Resolution to Award
+E. Post-Qual Evaulation Report
+F. Notice of Post-qualification
+G. BAC Resolution to Post-qualify
+H. Abstract of Bids as Evaluated
+I. TWG Bid Evaluation Report
+J. Minutes of Bid Opening
+K. Eligibility Check Results
+L. Bidders Technical and Financial Proposals
+M. Minutes of Pre-Bid Conference
+N. Bidding Documents
+O.1. Letter Invitation to Observers
+O.2. Official Receipt
+O.3. Board Resolution
+O.4. PhilGEPS Award Notice Abstract
+P.1. PhilGEPS Posting
+P.2. Website Posting
+P.3. Posting Certificate
+Q. CAF, PR, TOR & APP
+
+SVP Progress:
+	- Add Received PR for Action
+	- Add PR Deliberated
+	- Published
+	- Add RFQ for Canvass
+	- Add RFQ Opening
+	- Add BAC Resolution
+	- Add Forwarded GSD for P.O.
+
+Regular Bidding:
+	- Add Received PR for Action
+	- Add PR Deliberated
+	- Published
+	- Pre-bid
+	- Bid Opening
+	- Bid Evaluation Report
+	- Add BAC Resolution
+	- Post-Qualification
+	- Post-Qualification Report
+	- Forwareded to OAPIA
+	- NOA
+	- Contract Date
+	- NTP
+	- Awarded to Supplier
+
+
+
+flowchart TD
+
+%% =====================================================
+%% STRATEGIC PROCUREMENT PLANNING (RA 12009 EMPHASIS)
+%% =====================================================
+
+A[Identify Procurement Need] --> B{Included in APP?}
+
+B -- No --> B1[Amend APP]
+B1 --> B2{Approved by HOPE?}
+B2 -- No --> B3[Return to End-User for Revision]
+B2 -- Yes --> C[Proceed to Market Analysis]
+
+B -- Yes --> C[Proceed to Market Analysis]
+
+C --> D[Conduct Market Research / Industry Scan]
+D --> E{Fit-for-Purpose Strategy Identified?}
+
+E -- No --> D
+E -- Yes --> F[Define Procurement Strategy]
+
+F --> G{Method Selection}
+
+G -- Competitive Bidding --> H[Prepare Bidding Documents]
+G -- Alternative Method --> ALT0[Justify Alternative Method]
+G -- Framework Agreement --> FA0[Initiate Framework Process]
+G -- Emergency Procurement --> EM0[Document Emergency Grounds]
+
+%% =====================================================
+%% PRE-PROCUREMENT STAGE
+%% =====================================================
+
+H --> I[Pre-Procurement Conference]
+I --> J{Complete & Compliant Documents?}
+J -- No --> J1[Revise Documents]
+J1 --> I
+J -- Yes --> K[Approve Final Bidding Documents]
+
+%% =====================================================
+%% DIGITAL POSTING & ADVERTISEMENT
+%% =====================================================
+
+K --> L[Post Invitation (PhilGEPS / Electronic Portal)]
+L --> M[Issue Bidding Documents]
+M --> N[Conduct Pre-Bid Conference]
+
+N --> O{Need Bid Bulletin?}
+O -- Yes --> O1[Issue Supplemental/Bid Bulletin]
+O1 --> P[Continue Bid Preparation]
+O -- No --> P
+
+%% =====================================================
+%% BID SUBMISSION & OPENING
+%% =====================================================
+
+P --> Q[Receive Electronic / Physical Bids]
+Q --> R{Number of Bids?}
+
+R -- 0 --> R1[Declare Failure of Bidding]
+R1 --> R2{Re-bid?}
+R2 -- Yes --> L
+R2 -- No --> ALT0
+
+R -- 1 or more --> S[Public Bid Opening]
+S --> T[Preliminary Examination]
+
+T --> U{At least one passed Eligibility & Technical?}
+
+U -- No --> U1[Declare Failure of Bidding]
+U1 --> U2{Second Failure?}
+U2 -- Yes --> ALT0
+U2 -- No --> L
+
+U -- Yes --> V[Detailed Evaluation]
+
+%% =====================================================
+%% EVALUATION (LCB/HRB or VALUE-BASED)
+%% =====================================================
+
+V --> W{Procurement Type?}
+
+W -- Goods/Infra --> W1[Determine Lowest Calculated Bid]
+W -- Consulting --> W2[Determine Highest Rated Bid]
+W -- Value-Based Method --> W3[Apply Best Value Evaluation]
+
+W1 --> X[Post-Qualification]
+W2 --> X
+W3 --> X
+
+%% =====================================================
+%% POST-QUALIFICATION & RISK CHECK
+%% =====================================================
+
+X --> Y{Passed Post-Qualification?}
+
+Y -- No --> Y1[Disqualify Bidder]
+Y1 --> Y2{Next Ranked Bid Available?}
+Y2 -- Yes --> X
+Y2 -- No --> Y3[Declare Failure]
+Y3 --> Y4{Re-bid or Alternative?}
+Y4 -- Re-bid --> L
+Y4 -- Alternative --> ALT0
+
+Y -- Yes --> Z[BAC Resolution Recommending Award]
+
+%% =====================================================
+%% APPROVAL & AWARD
+%% =====================================================
+
+Z --> AA{HOPE Approves?}
+
+AA -- No --> AA1[Return to BAC for Review]
+AA1 --> V
+
+AA -- Yes --> AB[Issue Notice of Award]
+
+AB --> AC{Submit Performance Security?}
+
+AC -- No --> AC1[Forfeit Bid Security]
+AC1 --> AC2{Next Ranked Bid?}
+AC2 -- Yes --> X
+AC2 -- No --> R1
+
+AC -- Yes --> AD[Contract Signing]
+AD --> AE[Issue Notice to Proceed]
+
+%% =====================================================
+%% CONTRACT IMPLEMENTATION & MONITORING
+%% =====================================================
+
+AE --> AF[Project Implementation]
+AF --> AG{Need Variation / Change Order?}
+
+AG -- Yes --> AG1[Evaluate Variation]
+AG1 --> AG2{Within Legal Limits?}
+AG2 -- No --> AG3[Seek Higher Approval or New Procurement]
+AG2 -- Yes --> AF
+
+AG -- No --> AH[Inspection & Acceptance]
+
+AH --> AI{Accepted?}
+AI -- No --> AI1[Require Rectification]
+AI1 --> AF
+
+AI -- Yes --> AJ[Process Payment]
+
+%% =====================================================
+%% PERFORMANCE & RISK MANAGEMENT
+%% =====================================================
+
+AJ --> AK{Performance Issues?}
+
+AK -- Yes --> AK1[Issue Notice of Deficiency]
+AK1 --> AK2{Severe Breach?}
+AK2 -- Yes --> AK3[Terminate Contract]
+AK3 --> AK4[Blacklisting Proceedings]
+AK4 --> ALT0
+AK2 -- No --> AF
+
+AK -- No --> AL[Project Completion Report]
+
+%% =====================================================
+%% PROTEST & LEGAL REMEDY
+%% =====================================================
+
+Z --> PR{Bidder Files Protest?}
+
+PR -- Yes --> PR1[HOPE Resolves Protest]
+PR1 --> PR2{Granted?}
+PR2 -- Yes --> V
+PR2 -- No --> AB
+
+PR -- No --> AB
+
+%% =====================================================
+%% ALTERNATIVE METHODS PATH
+%% =====================================================
+
+ALT0 --> ALT1{Grounds Valid & Approved?}
+ALT1 -- No --> L
+ALT1 -- Yes --> ALT2[Conduct Negotiated / Shopping / Direct Contracting]
+ALT2 --> AD
+
+%% =====================================================
+%% FRAMEWORK AGREEMENT PATH
+%% =====================================================
+
+FA0 --> FA1[Pre-Qualification of Suppliers]
+FA1 --> FA2[Framework Agreement Execution]
+FA2 --> FA3[Call-Off Orders Issued]
+FA3 --> AF
+
+%% =====================================================
+%% EMERGENCY PROCUREMENT PATH
+%% =====================================================
+
+EM0 --> EM1[Document Urgency Justification]
+EM1 --> EM2[Direct Negotiation]
+EM2 --> AD
+
+
