@@ -21,6 +21,8 @@ import ProcurementList from "@/pages/ProcurementList";
 import SVPList from "@/pages/SVPList";
 import RegularList from "@/pages/RegularList";
 import ProgressTracking from "@/pages/ProgressTracking";
+import Suppliers from "@/pages/Suppliers";
+import UrgentRecords from "@/pages/UrgentRecords";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -165,6 +167,26 @@ const AppRoutes = () => {
           <ProtectedRoute>
             <AppLayout>
               <ProgressTracking />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/suppliers"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Suppliers />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/urgent-records"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <UrgentRecords />
             </AppLayout>
           </ProtectedRoute>
         }

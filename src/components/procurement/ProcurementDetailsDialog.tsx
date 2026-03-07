@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Procurement } from '@/types/procurement';
 import { format } from 'date-fns';
 import { MapPin, Calendar, FileText, Activity, Layers, Tag, User, Loader2 } from 'lucide-react';
+import { CHECKLIST_ITEMS } from '@/lib/constants';
 
 interface ProcurementDetailsDialogProps {
     open: boolean;
@@ -31,15 +32,19 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
 
     const formatDate = (dateString?: string) => {
         if (!dateString) return 'N/A';
+        // If it looks like an ISO timestamp, format it nicely
         try {
-            return format(new Date(dateString), 'PPP');
-        } catch (e) {
-            return 'Invalid Date';
-        }
+            const d = new Date(dateString);
+            if (!isNaN(d.getTime()) && dateString.includes('T')) {
+                return format(d, 'MMM d, yyyy');
+            }
+        } catch { }
+        return dateString;
     };
 
     const getCurrentStage = (p: Procurement) => {
         if (p.procurementType === 'SVP') {
+            if (p.poNtpForwardedGsdDate) return 'Add PO/NTP forwarded to GSD';
             if (p.forwardedGsdDate) return 'Forwarded GSD for P.O.';
             if (p.bacResolutionDate) return 'BAC Resolution';
             if (p.rfqOpeningDate) return 'RFQ Opening';
@@ -116,7 +121,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                             {/* Summary Cards */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-800">
-                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Division</label>
+                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">End User</label>
                                     <div className="flex items-center gap-2 mt-1">
                                         <Layers className="h-4 w-4 text-blue-400" />
                                         <span>{procurement.division || 'N/A'}</span>
@@ -162,13 +167,13 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         {procurement.abc && (
                                             <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-700">
                                                 <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">ABC (Approved Budget)</label>
-                                                <p className="text-lg font-bold text-emerald-400 font-mono">₱{parseFloat(procurement.abc).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                <p className="text-lg font-bold text-emerald-400 font-mono">₱{parseFloat(String(procurement.abc)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                             </div>
                                         )}
                                         {procurement.bidAmount && (
                                             <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-700">
                                                 <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Bid Amount (Contract Price)</label>
-                                                <p className="text-lg font-bold text-blue-400 font-mono">₱{parseFloat(procurement.bidAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                                <p className="text-lg font-bold text-blue-400 font-mono">₱{parseFloat(String(procurement.bidAmount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                             </div>
                                         )}
                                         {procurement.supplier && (
@@ -184,11 +189,21 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                             {/* Main Details */}
                             <div className="space-y-4">
                                 <div>
-                                    <h3 className="text-lg font-semibold border-b border-slate-800 pb-2 mb-3">Description</h3>
+                                    <h3 className="text-lg font-semibold border-b border-slate-800 pb-2 mb-3">Description / Remarks</h3>
                                     <p className="text-slate-200 leading-relaxed bg-[#1e293b] p-4 rounded-md text-sm border border-slate-700/50">
-                                        {procurement.description}
+                                        {procurement.description || procurement.remarks || 'N/A'}
                                     </p>
                                 </div>
+
+                                {/* Notes */}
+                                {procurement.notes && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold border-b border-slate-800 pb-2 mb-3">Notes</h3>
+                                        <p className="text-slate-200 leading-relaxed bg-[#1e293b] p-4 rounded-md text-sm border border-slate-700/50 whitespace-pre-wrap">
+                                            {procurement.notes}
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div>
                                     <div className="border-b border-slate-800 pb-2 mb-3">
@@ -297,18 +312,24 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                                         </div>
                                                     </>
                                                 ) : (
-                                                    <div className="space-y-1">
-                                                        <label className="text-xs text-slate-500 block">To GSD</label>
-                                                        <p className="font-mono text-sm text-slate-200">{formatDate(procurement.forwardedGsdDate)}</p>
-                                                    </div>
+                                                    <>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-slate-500 block">To GSD</label>
+                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.forwardedGsdDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-slate-500 block">PO/NTP to GSD</label>
+                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.poNtpForwardedGsdDate)}</p>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Access Log / Borrow Info */}
-                                {procurement.status === 'active' && (
+                                {/* Access Log / Borrow Info - show when actively borrowed */}
+                                {procurement.status === 'active' && procurement.borrowedBy && (
                                     <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4 mt-2">
                                         <h4 className="text-orange-400 font-semibold mb-2 flex items-center gap-2">
                                             <User className="h-4 w-4" />
@@ -317,7 +338,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         <div className="grid grid-cols-2 gap-4 text-sm">
                                             <div>
                                                 <span className="text-slate-500">Borrowed By:</span>
-                                                <p className="font-medium text-slate-200">{procurement.borrowedBy || 'N/A'}</p>
+                                                <p className="font-medium text-slate-200">{procurement.borrowedBy}</p>
                                             </div>
                                             <div>
                                                 <span className="text-slate-500">Division:</span>
@@ -331,26 +352,55 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                     </div>
                                 )}
 
-                                {/* Return Info - Show if Archived and has return data */}
-                                {procurement.status === 'archived' && (
+                                {/* Borrow history for archived (previously borrowed) */}
+                                {procurement.status === 'active' && !procurement.borrowedBy && (
+                                    <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4 mt-2">
+                                        <h4 className="text-orange-400 font-semibold mb-2 flex items-center gap-2">
+                                            <User className="h-4 w-4" />
+                                            Current Borrower Info
+                                        </h4>
+                                        <p className="text-sm text-slate-500 italic">No borrower details recorded.</p>
+                                    </div>
+                                )}
+
+                                {/* Return Info - Only show when archived AND has borrow/return history */}
+                                {procurement.status === 'archived' && (procurement.borrowedBy || procurement.returnedBy || procurement.returnDate) && (
                                     <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4 mt-2">
                                         <h4 className="text-emerald-400 font-semibold mb-2 flex items-center gap-2">
                                             <User className="h-4 w-4" />
-                                            Return Information
+                                            Borrow / Return History
                                         </h4>
                                         <div className="grid grid-cols-2 gap-4 text-sm">
-                                            <div>
-                                                <span className="text-slate-500">Returned By:</span>
-                                                <p className="font-medium text-slate-200">{procurement.returnedBy || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-slate-500">Division:</span>
-                                                <p className="font-medium text-slate-200">{procurement.borrowerDivision || 'N/A'}</p>
-                                            </div>
-                                            <div>
-                                                <span className="text-slate-500">Date Returned:</span>
-                                                <p className="font-medium text-slate-200">{formatDate(procurement.returnDate)}</p>
-                                            </div>
+                                            {procurement.borrowedBy && (
+                                                <div>
+                                                    <span className="text-slate-500">Borrowed By:</span>
+                                                    <p className="font-medium text-slate-200">{procurement.borrowedBy}</p>
+                                                </div>
+                                            )}
+                                            {procurement.borrowerDivision && (
+                                                <div>
+                                                    <span className="text-slate-500">Borrower Division:</span>
+                                                    <p className="font-medium text-slate-200">{procurement.borrowerDivision}</p>
+                                                </div>
+                                            )}
+                                            {procurement.borrowedDate && (
+                                                <div>
+                                                    <span className="text-slate-500">Date Borrowed:</span>
+                                                    <p className="font-medium text-slate-200">{formatDate(procurement.borrowedDate)}</p>
+                                                </div>
+                                            )}
+                                            {procurement.returnedBy && (
+                                                <div>
+                                                    <span className="text-slate-500">Returned By:</span>
+                                                    <p className="font-medium text-slate-200">{procurement.returnedBy}</p>
+                                                </div>
+                                            )}
+                                            {procurement.returnDate && (
+                                                <div>
+                                                    <span className="text-slate-500">Date Returned:</span>
+                                                    <p className="font-medium text-slate-200">{formatDate(procurement.returnDate)}</p>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -365,75 +415,26 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <ScrollArea className="h-[250px] pr-4">
-                                                <div className="flex flex-col md:flex-row gap-6">
-                                                    {/* LEFT COLUMN */}
-                                                    <div className="flex-1 space-y-2">
-                                                        {[
-                                                            { key: 'noticeToProceed', label: 'A. Notice to Proceed' },
-                                                            { key: 'contractOfAgreement', label: 'B. Contract of Agreement' },
-                                                            { key: 'noticeOfAward', label: 'C. Notice of Award' },
-                                                            { key: 'bacResolutionAward', label: 'D. BAC Resolution to Award' },
-                                                            { key: 'postQualReport', label: 'E. Post-Qual Report' },
-                                                            { key: 'noticePostQual', label: 'F. Notice of Post-qualification' },
-                                                            { key: 'bacResolutionPostQual', label: 'G. BAC Resolution to Post-qualify' },
-                                                            { key: 'abstractBidsEvaluated', label: 'H. Abstract of Bids as Evaluated' },
-                                                            { key: 'twgBidEvalReport', label: 'I. TWG Bid Evaluation Report' },
-                                                            { key: 'minutesBidOpening', label: 'J. Minutes of Bid Opening' },
-                                                            { key: 'resultEligibilityCheck', label: 'K. Eligibility Check Results' },
-                                                        ].map((item) => (
-                                                            <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-slate-800/30 transition-colors">
-                                                                <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
-                                                                    ? 'bg-blue-600 border-blue-600'
-                                                                    : 'border-slate-600'
-                                                                    }`}>
-                                                                    {procurement.checklist?.[item.key as keyof typeof procurement.checklist] && (
-                                                                        <span className="text-white text-[10px]">✓</span>
-                                                                    )}
-                                                                </div>
-                                                                <span className={`text-xs leading-tight ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
-                                                                    ? 'text-slate-200'
-                                                                    : 'text-slate-500'
-                                                                    }`}>
-                                                                    {item.label}
-                                                                </span>
+                                            <ScrollArea className="h-[300px] pr-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {CHECKLIST_ITEMS.map((item) => (
+                                                        <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-slate-800/30 transition-colors">
+                                                            <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
+                                                                ? 'bg-blue-600 border-blue-600'
+                                                                : 'border-slate-600'
+                                                                }`}>
+                                                                {procurement.checklist?.[item.key as keyof typeof procurement.checklist] && (
+                                                                    <span className="text-white text-[10px]">✓</span>
+                                                                )}
                                                             </div>
-                                                        ))}
-                                                    </div>
-
-                                                    {/* RIGHT COLUMN */}
-                                                    <div className="flex-1 space-y-2">
-                                                        {[
-                                                            { key: 'biddersTechFinancialProposals', label: 'L. Bidders Technical and Financial Proposals' },
-                                                            { key: 'minutesPreBid', label: 'M. Minutes of Pre-Bid Conference' },
-                                                            { key: 'biddingDocuments', label: 'N. Bidding Documents' },
-                                                            { key: 'inviteObservers', label: 'O.1. Letter Invitation to Observers' },
-                                                            { key: 'officialReceipt', label: 'O.2. Official Receipt' },
-                                                            { key: 'boardResolution', label: 'O.3. Board Resolution' },
-                                                            { key: 'philgepsAwardNotice', label: 'O.4. PhilGEPS Award Notice Abstract' },
-                                                            { key: 'philgepsPosting', label: 'P.1. PhilGEPS Posting' },
-                                                            { key: 'websitePosting', label: 'P.2. Website Posting' },
-                                                            { key: 'postingCertificate', label: 'P.3. Posting Certificate' },
-                                                            { key: 'fundsAvailability', label: 'Q. CAF, PR, TOR & APP' },
-                                                        ].map((item) => (
-                                                            <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-slate-800/30 transition-colors">
-                                                                <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
-                                                                    ? 'bg-blue-600 border-blue-600'
-                                                                    : 'border-slate-600'
-                                                                    }`}>
-                                                                    {procurement.checklist?.[item.key as keyof typeof procurement.checklist] && (
-                                                                        <span className="text-white text-[10px]">✓</span>
-                                                                    )}
-                                                                </div>
-                                                                <span className={`text-xs leading-tight ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
-                                                                    ? 'text-slate-200'
-                                                                    : 'text-slate-500'
-                                                                    }`}>
-                                                                    {item.label}
-                                                                </span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                            <span className={`text-xs leading-tight ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
+                                                                ? 'text-slate-200'
+                                                                : 'text-slate-500'
+                                                                }`}>
+                                                                {item.label}
+                                                            </span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </ScrollArea>
                                         </CardContent>
@@ -448,9 +449,9 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         <span className="block font-semibold mb-1">Stack Number</span>
                                         <span className="font-mono">{procurement.stackNumber ? `#${procurement.stackNumber}` : 'N/A'}</span>
                                     </div>
-                                    {procurement.status === 'active' && procurement.division && (
+                                    {procurement.division && (
                                         <div>
-                                            <span className="block font-semibold mb-1">Borrowed By Division</span>
+                                            <span className="block font-semibold mb-1">End User</span>
                                             <span className="capitalize">{procurement.division}</span>
                                         </div>
                                     )}

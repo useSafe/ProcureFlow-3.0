@@ -49,6 +49,7 @@ const SVP_PHASES: Phase[] = [
     { key: 'rfqOpeningDate', label: 'RFQ Opening', shortLabel: 'RFQ Open', icon: Gavel, dateField: 'rfqOpeningDate' },
     { key: 'bacResolutionDate', label: 'BAC Resolution', shortLabel: 'BAC Res', icon: FileCheck, dateField: 'bacResolutionDate' },
     { key: 'forwardedGsdDate', label: 'Forwarded to GSD', shortLabel: 'To GSD', icon: PackageCheck, dateField: 'forwardedGsdDate' },
+    { key: 'poNtpForwardedGsdDate', label: 'PO/NTP to GSD', shortLabel: 'PO To GSD', icon: PackageCheck, dateField: 'poNtpForwardedGsdDate' },
 ];
 
 // Phase circle color based on completion
@@ -120,11 +121,13 @@ const PhasePipeline = ({ procurement }: { procurement: Procurement }) => {
                                 <span className={`text-[8px] font-bold uppercase tracking-wider mb-0.5 ${completed ? 'text-slate-300' : 'text-slate-500'}`}>
                                     {phase.shortLabel}
                                 </span>
-                                {dateVal && (
-                                    <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">
-                                        {format(new Date(dateVal), 'MMM d')}
-                                    </span>
-                                )}
+                                {dateVal && (() => {
+                                    try {
+                                        const d = new Date(dateVal);
+                                        if (isNaN(d.getTime())) return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{dateVal}</span>;
+                                        return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{format(d, 'MMM d')}</span>;
+                                    } catch { return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{dateVal}</span>; }
+                                })()}
                             </div>
                         </div>
 
@@ -292,10 +295,10 @@ const VisualAllocation: React.FC = () => {
                 {/* Note: Files breadcrumb for Box mode handled by generic 'selectedFolderId' check above if we want, or we can explicit it here */}
             </div>
 
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex-1">
-                    <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Visual Allocation</h1>
-                    <p className="text-slate-400">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">Visual Allocation</h1>
+                    <p className="text-slate-400 text-sm">
                         {viewMode === 'shelves' && 'Select a Shelf to view its contents.'}
                         {viewMode === 'cabinets' && `Viewing Cabinets in Shelf ${currentShelf?.name}`}
                         {viewMode === 'folders' && `Viewing Folders in Cabinet ${currentCabinet?.name}`}
@@ -305,42 +308,44 @@ const VisualAllocation: React.FC = () => {
                     </p>
                 </div>
 
-                {/* Visual Toggle between Shelf and Box Storage */}
-                {!selectedShelfId && !selectedBoxId && (
-                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
-                        <Button
-                            variant={viewMode === 'shelves' ? 'secondary' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setViewMode('shelves'); setSelectedBoxId(null); }}
-                            className={viewMode === 'shelves' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
-                        >
-                            <Grid className="h-4 w-4 mr-2" />
-                            Shelf Storage
-                        </Button>
-                        <Button
-                            variant={viewMode === 'boxes' ? 'secondary' : 'ghost'}
-                            size="sm"
-                            onClick={() => { setViewMode('boxes'); setSelectedShelfId(null); setSelectedCabinetId(null); setSelectedFolderId(null); }}
-                            className={viewMode === 'boxes' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
-                        >
-                            <Archive className="h-4 w-4 mr-2" />
-                            Box Storage
-                        </Button>
-                    </div>
-                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Visual Toggle between Shelf and Box Storage */}
+                    {!selectedShelfId && !selectedBoxId && (
+                        <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
+                            <Button
+                                variant={viewMode === 'shelves' ? 'secondary' : 'ghost'}
+                                size="sm"
+                                onClick={() => { setViewMode('shelves'); setSelectedBoxId(null); }}
+                                className={viewMode === 'shelves' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+                            >
+                                <Grid className="h-4 w-4 mr-2" />
+                                Shelf Storage
+                            </Button>
+                            <Button
+                                variant={viewMode === 'boxes' ? 'secondary' : 'ghost'}
+                                size="sm"
+                                onClick={() => { setViewMode('boxes'); setSelectedShelfId(null); setSelectedCabinetId(null); setSelectedFolderId(null); }}
+                                className={viewMode === 'boxes' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+                            >
+                                <Archive className="h-4 w-4 mr-2" />
+                                Box Storage
+                            </Button>
+                        </div>
+                    )}
 
-                {(viewMode !== 'shelves' && viewMode !== 'boxes') && (
-                    <Button variant="outline" onClick={goBack} className="gap-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700">
-                        <ArrowLeft className="h-4 w-4" /> Up One Level
-                    </Button>
-                )}
+                    {(viewMode !== 'shelves' && viewMode !== 'boxes') && (
+                        <Button variant="outline" onClick={goBack} className="gap-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700">
+                            <ArrowLeft className="h-4 w-4" /> Up One Level
+                        </Button>
+                    )}
+                </div>
             </div>
 
-            <div className="bg-[#0f172a] p-8 rounded-xl border border-slate-800 min-h-[60vh] shadow-inner">
+            <div className="bg-[#0f172a] p-4 sm:p-6 lg:p-8 rounded-xl border border-slate-800 min-h-[60vh] shadow-inner">
 
                 {/* SHELVES VIEW (Racks) */}
                 {viewMode === 'shelves' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 animate-in zoom-in-50 duration-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 animate-in zoom-in-50 duration-300">
                         {shelves.map(shelf => (
                             <div
                                 key={shelf.id}
@@ -388,7 +393,7 @@ const VisualAllocation: React.FC = () => {
 
                 {/* CABINETS VIEW (Drawers) */}
                 {viewMode === 'cabinets' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in zoom-in-50 duration-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in zoom-in-50 duration-300">
                         {getCabinetsForShelf(selectedShelfId!).map(cabinet => (
                             <div
                                 key={cabinet.id}
@@ -420,7 +425,7 @@ const VisualAllocation: React.FC = () => {
 
                 {/* FOLDERS VIEW (Tabs) */}
                 {viewMode === 'folders' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 animate-in zoom-in-50 duration-300">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 animate-in zoom-in-50 duration-300">
                         {getFoldersForCabinet(selectedCabinetId!).map(folder => (
                             <div
                                 key={folder.id}
@@ -494,7 +499,7 @@ const VisualAllocation: React.FC = () => {
 
                 {/* BOXES VIEW (Grid) */}
                 {viewMode === 'boxes' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in zoom-in-50 duration-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in zoom-in-50 duration-300">
                         {sortedBoxes.map(box => (
                             <div
                                 key={box.id}
@@ -559,7 +564,7 @@ const VisualAllocation: React.FC = () => {
 
                 {/* BOX FOLDERS VIEW (Tabs) */}
                 {viewMode === 'box_folders' && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 animate-in zoom-in-50 duration-300">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6 animate-in zoom-in-50 duration-300">
                         {getFoldersForBox(selectedBoxId!).map(folder => (
                             <div
                                 key={folder.id}
@@ -638,7 +643,7 @@ const VisualAllocation: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">Division</h3>
+                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">End User</h3>
                                     <p className="text-white">{selectedFile.division || 'N/A'}</p>
                                 </div>
                                 <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
@@ -685,8 +690,15 @@ const VisualAllocation: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <h3 className="text-[10px] uppercase font-bold text-slate-500 mt-4 mb-2 border-t border-slate-800 pt-3">Description</h3>
-                                    <p className="text-white text-sm leading-relaxed">{selectedFile.description}</p>
+                                    <h3 className="text-[10px] uppercase font-bold text-slate-500 mt-4 mb-2 border-t border-slate-800 pt-3">Description / Remarks</h3>
+                                    <p className="text-white text-sm leading-relaxed">{selectedFile.description || selectedFile.remarks || 'N/A'}</p>
+
+                                    {selectedFile.notes && (
+                                        <>
+                                            <h3 className="text-[10px] uppercase font-bold text-slate-500 mt-4 mb-2 border-t border-slate-800 pt-3">Notes</h3>
+                                            <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">{selectedFile.notes}</p>
+                                        </>
+                                    )}
                                 </div>
 
                                 <div className="p-4 bg-slate-900 rounded-lg border border-slate-800">
@@ -709,22 +721,63 @@ const VisualAllocation: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Borrow Info */}
+                            {/* Borrow Info - Only when borrowed AND has borrower data */}
                             {selectedFile.status === 'active' && (
                                 <div className="p-4 bg-orange-950/20 rounded-lg border border-orange-500/20">
                                     <h3 className="text-sm font-medium text-orange-400 mb-2">Borrower Information</h3>
+                                    {selectedFile.borrowedBy ? (
+                                        <div className="grid grid-cols-2 gap-4 text-xs text-white">
+                                            <div>
+                                                <span className="text-slate-500 block">Borrower:</span>
+                                                {selectedFile.borrowedBy}
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500 block">Borrower Division:</span>
+                                                {selectedFile.borrowerDivision || 'N/A'}
+                                            </div>
+                                            <div>
+                                                <span className="text-slate-500 block">Date Borrowed:</span>
+                                                {selectedFile.borrowedDate ? format(new Date(selectedFile.borrowedDate), 'MMM d, yyyy') : 'N/A'}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-500 italic">No borrower details recorded.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Borrow/Return History - Only when archived and has history */}
+                            {selectedFile.status === 'archived' && (selectedFile.borrowedBy || selectedFile.returnedBy || selectedFile.returnDate) && (
+                                <div className="p-4 bg-emerald-950/20 rounded-lg border border-emerald-500/20">
+                                    <h3 className="text-sm font-medium text-emerald-400 mb-2">Borrow / Return History</h3>
                                     <div className="grid grid-cols-2 gap-4 text-xs text-white">
-                                        <div>
-                                            <span className="text-slate-500 block">Borrower:</span>
-                                            {selectedFile.borrowedBy || 'N/A'}
-                                        </div>
-                                        <div>
-                                            <span className="text-slate-500 block">Date Borrowed:</span>
-                                            {selectedFile.borrowedDate ? format(new Date(selectedFile.borrowedDate), 'MMM d, yyyy') : 'N/A'}
-                                        </div>
+                                        {selectedFile.borrowedBy && (
+                                            <div>
+                                                <span className="text-slate-500 block">Borrowed By:</span>
+                                                {selectedFile.borrowedBy}
+                                            </div>
+                                        )}
+                                        {selectedFile.borrowerDivision && (
+                                            <div>
+                                                <span className="text-slate-500 block">Borrower Division:</span>
+                                                {selectedFile.borrowerDivision}
+                                            </div>
+                                        )}
+                                        {selectedFile.borrowedDate && (
+                                            <div>
+                                                <span className="text-slate-500 block">Date Borrowed:</span>
+                                                {format(new Date(selectedFile.borrowedDate), 'MMM d, yyyy')}
+                                            </div>
+                                        )}
+                                        {selectedFile.returnedBy && (
+                                            <div>
+                                                <span className="text-slate-500 block">Returned By:</span>
+                                                {selectedFile.returnedBy}
+                                            </div>
+                                        )}
                                         {selectedFile.returnDate && (
                                             <div>
-                                                <span className="text-slate-500 block">Return Date:</span>
+                                                <span className="text-slate-500 block">Date Returned:</span>
                                                 {format(new Date(selectedFile.returnDate), 'MMM d, yyyy')}
                                             </div>
                                         )}

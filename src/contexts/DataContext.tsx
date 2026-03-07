@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Cabinet, Shelf, Folder, Box, Procurement } from '@/types/procurement';
-import { onCabinetsChange, onShelvesChange, onFoldersChange, onBoxesChange, onProcurementsChange } from '@/lib/storage';
+import { onCabinetsChange, onShelvesChange, onFoldersChange, onBoxesChange, onProcurementsChange, onDatabaseSizeChange } from '@/lib/storage';
 
 interface DataContextType {
     cabinets: Cabinet[];
@@ -9,6 +9,7 @@ interface DataContextType {
     boxes: Box[];
     procurements: Procurement[];
     loading: boolean;
+    dbSize: number;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -20,6 +21,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [boxes, setBoxes] = useState<Box[]>([]);
     const [procurements, setProcurements] = useState<Procurement[]>([]);
     const [loading, setLoading] = useState(true);
+    const [dbSize, setDbSize] = useState(0);
 
     useEffect(() => {
         const unsubCabinets = onCabinetsChange(setCabinets);
@@ -27,6 +29,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const unsubFolders = onFoldersChange(setFolders);
         const unsubBoxes = onBoxesChange(setBoxes);
         const unsubProcurements = onProcurementsChange(setProcurements);
+        const unsubDbSize = onDatabaseSizeChange(setDbSize);
 
         // Simple loading simulation or wait for initial data
         // In real app, we'd check if data is loaded.
@@ -39,12 +42,13 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             unsubFolders();
             unsubBoxes();
             unsubProcurements();
+            unsubDbSize();
             clearTimeout(timer);
         };
     }, []);
 
     return (
-        <DataContext.Provider value={{ cabinets, shelves, folders, boxes, procurements, loading }}>
+        <DataContext.Provider value={{ cabinets, shelves, folders, boxes, procurements, loading, dbSize }}>
             {children}
         </DataContext.Provider>
     );

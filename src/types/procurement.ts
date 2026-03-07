@@ -98,6 +98,7 @@ export interface Procurement {
     rfqOpeningDate?: string;
     bacResolutionDate?: string;
     forwardedGsdDate?: string;
+    poNtpForwardedGsdDate?: string;
 
     // Monitoring Dates - Regular Bidding
     preBidDate?: string;
@@ -117,6 +118,7 @@ export interface Procurement {
     remarks?: string; // Explicit remarks field if description is used for something else, but Plan said Remarks <- Description. I'll add this just in case.
 
     urgencyLevel: UrgencyLevel;
+    deadline?: string;
 
     // Metadata
     procurementType?: 'Regular Bidding' | 'SVP' | 'Attendance Sheets' | 'Receipt' | 'Others';

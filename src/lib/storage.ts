@@ -1,6 +1,8 @@
 import { Cabinet, Shelf, Folder, Box, Division, Procurement, User, LocationStats } from '@/types/procurement';
+import { Supplier } from '@/types/supplier';
 import { db } from './firebase';
 import { ref, get, set, remove, push, child, onValue, update } from 'firebase/database';
+import { logActivity } from './activity-logger';
 
 // ========== User Storage ==========
 // We'll keep user storage local for now as it's just a simple simulation
@@ -77,6 +79,15 @@ export const onDivisionsChange = (callback: (divisions: Division[]) => void) => 
     });
 };
 
+export const onSuppliersChange = (callback: (suppliers: Supplier[]) => void) => {
+    const suppliersRef = ref(db, 'suppliers');
+    return onValue(suppliersRef, (snapshot) => {
+        const data = snapshot.val();
+        const suppliers = data ? Object.values(data) as Supplier[] : [];
+        callback(suppliers);
+    });
+};
+
 // ========== FETCH (Promise-based for one-time reads) ==========
 
 export const getCabinets = async (): Promise<Cabinet[]> => {
@@ -124,6 +135,15 @@ export const getBoxes = async (): Promise<Box[]> => {
     return [];
 };
 
+export const getSuppliers = async (): Promise<Supplier[]> => {
+    const dbRef = ref(db);
+    const snapshot = await get(child(dbRef, 'suppliers'));
+    if (snapshot.exists()) {
+        return Object.values(snapshot.val()) as Supplier[];
+    }
+    return [];
+};
+
 // ========== WRITE OPERATIONS ==========
 
 // --- Cabinet ---
@@ -137,11 +157,13 @@ export const addCabinet = async (name: string, code: string, description?: strin
         createdAt: new Date().toISOString(),
     };
     await set(ref(db, 'cabinets/' + id), newCabinet);
+    logActivity('add', 'cabinet', `${newCabinet.name} (${newCabinet.code})`, 'system', 'system');
     return newCabinet;
 };
 
 export const updateCabinet = async (id: string, updates: Partial<Cabinet>): Promise<void> => {
     await update(ref(db, 'cabinets/' + id), updates);
+    logActivity('edit', 'cabinet', updates.name || id, 'system', 'system');
 };
 
 export const deleteCabinet = async (id: string): Promise<void> => {
@@ -167,6 +189,7 @@ export const deleteCabinet = async (id: string): Promise<void> => {
 
     // 3. Delete Cabinet
     await remove(ref(db, 'cabinets/' + id));
+    logActivity('delete', 'cabinet', id, 'system', 'system');
 };
 
 // --- Shelf ---
@@ -181,6 +204,7 @@ export const addShelf = async (cabinetId: string, name: string, code: string, de
         createdAt: new Date().toISOString(),
     };
     await set(ref(db, 'shelves/' + id), newShelf);
+    logActivity('add', 'drawer', `${newShelf.name} (${newShelf.code})`, 'system', 'system');
     return newShelf;
 };
 
@@ -207,6 +231,7 @@ export const deleteShelf = async (id: string): Promise<void> => {
 
     // 3. Delete Shelf
     await remove(ref(db, 'shelves/' + id));
+    logActivity('delete', 'drawer', id, 'system', 'system');
 };
 
 // --- Folder ---
@@ -245,11 +270,60 @@ export const addFolder = async (
     }
 
     await set(ref(db, 'folders/' + id), newFolder);
+    logActivity('add', 'folder', `${newFolder.name} (${newFolder.code})`, 'system', 'system');
     return newFolder;
 };
 
 export const updateFolder = async (id: string, updates: Partial<Folder>): Promise<void> => {
+    if ('boxId' in updates || 'shelfId' in updates) {
+        const folders = await getFolders();
+        const currentFolder = folders.find(f => f.id === id);
+
+        if (currentFolder) {
+            // Determine if parent actually changed
+            const isBoxChanged = 'boxId' in updates && updates.boxId !== currentFolder.boxId;
+            const isShelfChanged = 'shelfId' in updates && updates.shelfId !== currentFolder.shelfId;
+
+            if (isBoxChanged || isShelfChanged) {
+                const procurements = await getProcurements();
+                const folderRecords = procurements.filter(p => p.folderId === id);
+
+                const dbUpdates: Record<string, any> = {};
+
+                // Add folder updates
+                Object.keys(updates).forEach(key => {
+                    dbUpdates[`folders/${id}/${key}`] = updates[key as keyof Folder];
+                });
+
+                // Calculate the new locations
+                const targetBoxId = 'boxId' in updates ? updates.boxId : currentFolder.boxId;
+                const targetShelfId = 'shelfId' in updates ? updates.shelfId : currentFolder.shelfId;
+                let targetCabinetId: string | null = null;
+
+                if (targetShelfId && !targetBoxId) {
+                    const shelves = await getShelves();
+                    const targetShelf = shelves.find(s => s.id === targetShelfId);
+                    if (targetShelf) {
+                        targetCabinetId = targetShelf.cabinetId;
+                    }
+                }
+
+                // Append all child procurements updates
+                for (const record of folderRecords) {
+                    dbUpdates[`procurements/${record.id}/boxId`] = targetBoxId || null;
+                    dbUpdates[`procurements/${record.id}/shelfId`] = targetShelfId || null;
+                    dbUpdates[`procurements/${record.id}/cabinetId`] = targetCabinetId || null;
+                }
+
+                await update(ref(db), dbUpdates);
+                logActivity('edit', 'folder', updates.name || id, 'system', 'system');
+                return;
+            }
+        }
+    }
+
     await update(ref(db, 'folders/' + id), updates);
+    logActivity('edit', 'folder', updates.name || id, 'system', 'system');
 };
 
 export const deleteFolder = async (id: string): Promise<void> => {
@@ -260,6 +334,7 @@ export const deleteFolder = async (id: string): Promise<void> => {
         throw new Error("Cannot delete Folder: It contains active records. Please move or delete them first.");
     }
     await remove(ref(db, 'folders/' + id));
+    logActivity('delete', 'folder', id, 'system', 'system');
 };
 
 // --- Box ---
@@ -281,6 +356,7 @@ export const addBox = async (
     if (boxData.shelfId) newBox.shelfId = boxData.shelfId;
 
     await set(ref(db, 'boxes/' + id), newBox);
+    logActivity('add', 'box', `${newBox.name} (${newBox.code})`, 'system', 'system');
     return newBox;
 };
 
@@ -319,6 +395,7 @@ export const deleteBox = async (id: string): Promise<void> => {
     }
 
     await remove(ref(db, 'boxes/' + id));
+    logActivity('delete', 'box', id, 'system', 'system');
 };
 
 // --- Division ---
@@ -332,6 +409,7 @@ export const addDivision = async (name: string, abbreviation: string, endUser?: 
         createdAt: new Date().toISOString(),
     };
     await set(ref(db, 'divisions/' + id), newDivision);
+    logActivity('add', 'division', `${newDivision.name} (${newDivision.abbreviation})`, 'system', 'system');
     return newDivision;
 };
 
@@ -340,9 +418,37 @@ export const updateDivision = async (id: string, updates: Partial<Division>): Pr
 };
 
 export const deleteDivision = async (id: string): Promise<void> => {
-    // Optional: Check if used in procurements (though currently we verify via cascading delete logic usually)
-    // For now, allow delete, but maybe warn user in UI.
     await remove(ref(db, 'divisions/' + id));
+    logActivity('delete', 'division', id, 'system', 'system');
+};
+
+// --- Supplier ---
+export const addSupplier = async (supplierData: Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'>): Promise<Supplier> => {
+    const id = crypto.randomUUID();
+    const newSupplier: Supplier = {
+        ...supplierData,
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    await set(ref(db, 'suppliers/' + id), newSupplier);
+    logActivity('add', 'supplier', newSupplier.name, 'system', 'system');
+    return newSupplier;
+};
+
+export const updateSupplier = async (id: string, updates: Partial<Supplier>): Promise<void> => {
+    const updatedData = { ...updates, updatedAt: new Date().toISOString() };
+    await update(ref(db, 'suppliers/' + id), updatedData);
+    logActivity('edit', 'supplier', updates.name || id, 'system', 'system');
+};
+
+export const deleteSupplier = async (id: string): Promise<void> => {
+    const procurements = await getProcurements();
+    // Assuming supplier name is stored in procurement.supplier or we check by ID if ever linked structurally
+    // For now we just let them delete, or track if they are in use:
+    // const hasFiles = procurements.some(p => p.supplier === id || p.supplier === name);
+    await remove(ref(db, 'suppliers/' + id));
+    logActivity('delete', 'supplier', id, 'system', 'system');
 };
 
 // --- Stack Number Logic ---
@@ -358,7 +464,8 @@ const recalculateStackNumbers = async (folderId?: string, boxId?: string): Promi
     if (folderId) {
         containerProcurements = allProcurements.filter(p => p.folderId === folderId);
     } else if (boxId) {
-        containerProcurements = allProcurements.filter(p => p.boxId === boxId);
+        // Only get loose files in the box (not in any folder)
+        containerProcurements = allProcurements.filter(p => p.boxId === boxId && !p.folderId);
     }
 
     // Filter for those that are "In Stack" (Archived/Available)
@@ -426,6 +533,9 @@ export const addProcurement = async (
 
     await set(ref(db, 'procurements/' + id), newProcurement);
 
+    // Log the add action
+    logActivity('add', 'file', `${newProcurement.prNumber} - ${newProcurement.projectName || newProcurement.description}`, userEmail, userName);
+
     // Recalculate stack if added to a folder or box
     if (newProcurement.folderId) {
         await recalculateStackNumbers(newProcurement.folderId, undefined);
@@ -476,6 +586,11 @@ export const updateProcurement = async (
 
     await update(ref(db, 'procurements/' + id), updatePayload);
 
+    // Log the edit action
+    if (userEmail && userName) {
+        logActivity('edit', 'file', currentProcurement?.prNumber || id, userEmail, userName);
+    }
+
     // Trigger recalculation if folder or box involved
     const folderId = updates.folderId || currentProcurement?.folderId;
     const boxId = updates.boxId || currentProcurement?.boxId;
@@ -486,9 +601,7 @@ export const updateProcurement = async (
         if (updates.folderId && currentProcurement?.folderId && updates.folderId !== currentProcurement.folderId) {
             await recalculateStackNumbers(currentProcurement.folderId, undefined);
         }
-    }
-
-    if (boxId) {
+    } else if (boxId) {
         await recalculateStackNumbers(undefined, boxId);
         // If moving between boxes
         if (updates.boxId && currentProcurement?.boxId && updates.boxId !== currentProcurement.boxId) {
@@ -502,11 +615,11 @@ export const deleteProcurement = async (id: string): Promise<void> => {
     const currentProcurement = currentProcurementSnapshot.val() as Procurement;
 
     await remove(ref(db, 'procurements/' + id));
+    logActivity('delete', 'file', currentProcurement?.prNumber || id, 'system', 'system');
 
     if (currentProcurement?.folderId) {
         await recalculateStackNumbers(currentProcurement.folderId, undefined);
-    }
-    if (currentProcurement?.boxId) {
+    } else if (currentProcurement?.boxId) {
         await recalculateStackNumbers(undefined, currentProcurement.boxId);
     }
 };
@@ -602,6 +715,14 @@ export const getLocationPath = async (procurement: Procurement): Promise<string>
     }
 };
 
+export const recalculateAllFolders = async (): Promise<void> => {
+    const folders = await getFolders();
+    for (const folder of folders) {
+        await recalculateStackNumbers(folder.id, undefined);
+    }
+    console.log(`Recalculated stack numbers for ${folders.length} folders`);
+};
+
 // ========== Initialization ==========
 export const initializeDemoData = (): void => {
     // Blank initialization as requested
@@ -620,17 +741,42 @@ export const onUsersChange = (callback: (users: User[]) => void) => {
 };
 
 export const addUser = async (user: User): Promise<void> => {
-    // Generate ID if not provided, but usually provided by caller or randomUUID
-    // We expect user object to be fully formed except maybe ID if we generate it here
     const userId = user.id || crypto.randomUUID();
     const newUser = { ...user, id: userId, createdAt: new Date().toISOString() };
     await set(ref(db, `users/${userId}`), newUser);
+    logActivity('add', 'account', `${newUser.name} (${newUser.email})`, 'system', 'system');
 };
 
 export const updateUser = async (id: string, updates: Partial<User>): Promise<void> => {
     await update(ref(db, `users/${id}`), updates);
+    logActivity('edit', 'account', updates.name || updates.email || id, 'system', 'system');
 };
 
 export const deleteUser = async (id: string): Promise<void> => {
     await remove(ref(db, `users/${id}`));
+    logActivity('delete', 'account', id, 'system', 'system');
+};
+
+// ========== Exact Database Size ==========
+// Reads from /stats/dbSize which is written by a Cloud Function (runs every 24h)
+// If no Cloud Function is deployed yet, falls back to a lightweight JSON estimate
+// of just the procurements node to avoid scanning the full DB.
+export const onDatabaseSizeChange = (callback: (bytes: number) => void) => {
+    const statsRef = ref(db, 'stats/dbSize');
+    return onValue(statsRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data && typeof data.bytes === 'number') {
+            // Cloud Function wrote a value – use it
+            callback(data.bytes);
+        } else {
+            // Fallback: lightweight estimate from procurements node only
+            const procRef = ref(db, 'procurements');
+            get(procRef).then((snap) => {
+                const val = snap.val();
+                if (!val) { callback(0); return; }
+                const bytes = new Blob([JSON.stringify(val)]).size;
+                callback(bytes);
+            }).catch(() => callback(0));
+        }
+    });
 };

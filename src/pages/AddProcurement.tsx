@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -14,12 +14,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { addProcurement, onDivisionsChange, addFolder } from '@/lib/storage';
+import { addProcurement, onDivisionsChange, addFolder, getProcurements, onSuppliersChange } from '@/lib/storage';
 import { getProcessSteps, isStepDisabled } from '@/lib/validation-utils';
 import { useData } from '@/contexts/DataContext';
 import { Shelf, Folder, Box, ProcurementStatus, Division, ProcurementProcessStatus } from '@/types/procurement';
+import { Supplier } from '@/types/supplier';
 import { toast } from 'sonner';
-import { Loader2, Save, CalendarIcon, Archive, FolderTree, Plus, X } from 'lucide-react';
+import { Loader2, Save, CalendarIcon, Archive, FolderTree, Plus, X, Trash2 } from 'lucide-react';
 import { format, addYears } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { CHECKLIST_ITEMS } from '@/lib/constants';
@@ -30,6 +31,26 @@ import {
 } from '@/components/ui/popover';
 import { constructPrNumber, getNextPrSequence, formatSequence } from '@/lib/pr-number-utils';
 import { formatNumberWithCommas, removeCommas, handleNumberInput, getDisplayValue } from '@/lib/number-utils';
+
+// ─── localStorage helpers ────────────────────────────────────────────────────
+const getStorageKey = (userEmail: string) => `procureflow_add_form_${userEmail}`;
+
+const loadDraft = (userEmail: string) => {
+    try {
+        const raw = localStorage.getItem(getStorageKey(userEmail));
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+};
+
+const saveDraft = (userEmail: string, data: any) => {
+    try {
+        localStorage.setItem(getStorageKey(userEmail), JSON.stringify(data));
+    } catch { /* quota exceeded or similar */ }
+};
+
+const clearDraft = (userEmail: string) => {
+    try { localStorage.removeItem(getStorageKey(userEmail)); } catch { }
+};
 
 const MONTHS = [
     { value: 'JAN', label: 'January' },
@@ -64,60 +85,81 @@ const AddProcurement: React.FC = () => {
     const { user } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const { cabinets, shelves, folders, boxes, procurements } = useData(); // cabinets=Drawers, shelves=Cabinets
+    const userEmail = user?.email || 'anonymous';
 
-    // Divisions State
+    // Resources State
     const [divisions, setDivisions] = useState<Division[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
     // Filtered location options based on selection
     const [availableShelves, setAvailableShelves] = useState<Shelf[]>([]); // "Cabinets"
     const [availableBoxes, setAvailableBoxes] = useState<Box[]>([]);
     const [availableFolders, setAvailableFolders] = useState<Folder[]>([]);
+    const [isFoldersLoading, setIsFoldersLoading] = useState(false);
+
+    // ── Load draft once on mount ───────────────────────────────────────────────
+    const draft = loadDraft(userEmail);
 
     // Form Mode
-    const [formMode, setFormMode] = useState<FormMode>('SVP');
-    const [activeTab, setActiveTab] = useState<'basic' | 'monitoring' | 'documents' | 'storage'>('basic');
+    const [formMode, setFormMode] = useState<FormMode>(draft?.formMode || 'SVP');
+    const [activeTab, setActiveTab] = useState<'basic' | 'monitoring' | 'documents' | 'storage'>(draft?.activeTab || 'basic');
 
     // Common Fields
-    const [projectName, setProjectName] = useState(''); // "Particulars"
-    const [description, setDescription] = useState(''); // "Remarks"
-    const [status, setStatus] = useState<ProcurementStatus>('archived'); // Storage Status
-    const [procurementProcessStatus, setProcurementProcessStatus] = useState<ProcurementProcessStatus>('Not yet Acted');
-    const [dateStatusUpdated, setDateStatusUpdated] = useState<Date | undefined>(new Date());
+    const [projectName, setProjectName] = useState(draft?.projectName || '');
+    const [description, setDescription] = useState(draft?.description || '');
+    const [status, setStatus] = useState<ProcurementStatus>(draft?.status || 'archived');
+    const [procurementProcessStatus, setProcurementProcessStatus] = useState<ProcurementProcessStatus>(draft?.procurementProcessStatus || 'Not yet Acted');
+    const [dateStatusUpdated, setDateStatusUpdated] = useState<Date | undefined>(
+        draft?.dateStatusUpdated ? new Date(draft.dateStatusUpdated) : new Date()
+    );
+    const [urgencyLevel, setUrgencyLevel] = useState<UrgencyLevel>(draft?.urgencyLevel || 'Medium');
+    const [deadline, setDeadline] = useState<Date | undefined>(
+        draft?.deadline ? new Date(draft.deadline) : undefined
+    );
 
     // Financials
-    const [abc, setAbc] = useState<string>('');
-    const [bidAmount, setBidAmount] = useState<string>('');
-    const [supplier, setSupplier] = useState('');
+    const [abc, setAbc] = useState<string>(draft?.abc || '');
+    const [bidAmount, setBidAmount] = useState<string>(draft?.bidAmount || '');
+    const [supplier, setSupplier] = useState(draft?.supplier || '');
 
     // Additional Fields
-    const [notes, setNotes] = useState('');
-    const [staffIncharge, setStaffIncharge] = useState(user?.name || '');
+    const [staffIncharge, setStaffIncharge] = useState(draft?.staffIncharge || user?.name || '');
 
-    // Borrowed Information (conditional on status === 'borrowed')
-    const [borrowerName, setBorrowerName] = useState('');
-    const [borrowingDivisionId, setBorrowingDivisionId] = useState('');
-    const [borrowedDate, setBorrowedDate] = useState<Date | undefined>();
+    // Borrowed Information
+    const [borrowerName, setBorrowerName] = useState(draft?.borrowerName || '');
+    const [borrowingDivisionId, setBorrowingDivisionId] = useState(draft?.borrowingDivisionId || '');
+    const [borrowedDate, setBorrowedDate] = useState<Date | undefined>(
+        draft?.borrowedDate ? new Date(draft.borrowedDate) : undefined
+    );
 
     // Date Added
-    const [dateAdded, setDateAdded] = useState<Date | undefined>(new Date());
+    const [dateAdded, setDateAdded] = useState<Date | undefined>(
+        draft?.dateAdded ? new Date(draft.dateAdded) : new Date()
+    );
 
     // PR Number Construction State
-    const [prDivisionId, setPrDivisionId] = useState(''); // Separate from End User Division
-    const [prMonth, setPrMonth] = useState(format(new Date(), 'MMM').toUpperCase());
-    const [prYear, setPrYear] = useState(format(new Date(), 'yy'));
-    const [prSequence, setPrSequence] = useState('001');
+    const [prFormat, setPrFormat] = useState<'old' | 'new'>(draft?.prFormat || 'old');
+    const [prDivisionId, setPrDivisionId] = useState(draft?.prDivisionId || '');
+    const [prMonth, setPrMonth] = useState(draft?.prMonth || format(new Date(), 'MMM').toUpperCase());
+    const [prYear, setPrYear] = useState(draft?.prYear || format(new Date(), 'yyyy'));
+    const [prSequence, setPrSequence] = useState(draft?.prSequence || '001');
+    const [isCheckingPr, setIsCheckingPr] = useState(false);
+    const [prExists, setPrExists] = useState<boolean | null>(null);
 
-
+    // Tracks whether the user has manually edited the sequence field.
+    // When true, automatic recalculation is suppressed so Firebase updates
+    // don't overwrite what the user typed.
+    const userEditedSequence = useRef(false);
 
     // Division Selection (End User)
-    const [selectedDivisionId, setSelectedDivisionId] = useState('');
+    const [selectedDivisionId, setSelectedDivisionId] = useState(draft?.selectedDivisionId || '');
 
     // Storage Location State
-    const [storageMode, setStorageMode] = useState<'shelf' | 'box'>('shelf');
-    const [cabinetId, setCabinetId] = useState(''); // Drawer ID
-    const [shelfId, setShelfId] = useState('');     // Cabinet ID
-    const [folderId, setFolderId] = useState('');   // Folder ID
-    const [boxId, setBoxId] = useState('');         // Box ID
+    const [storageMode, setStorageMode] = useState<'shelf' | 'box'>(draft?.storageMode || 'shelf');
+    const [cabinetId, setCabinetId] = useState(draft?.cabinetId || '');
+    const [shelfId, setShelfId] = useState(draft?.shelfId || '');
+    const [folderId, setFolderId] = useState(draft?.folderId || '');
+    const [boxId, setBoxId] = useState(draft?.boxId || '');
 
     // Folder Creation in Box
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -125,67 +167,239 @@ const AddProcurement: React.FC = () => {
     const [newFolderCode, setNewFolderCode] = useState('');
 
     // Monitoring Dates - Common
-    const [receivedPrDate, setReceivedPrDate] = useState<Date>();
-    const [prDeliberatedDate, setPrDeliberatedDate] = useState<Date>();
-    const [publishedDate, setPublishedDate] = useState<Date>(); // Procurement Date
-    const [rfqCanvassDate, setRfqCanvassDate] = useState<Date>();
-    const [rfqOpeningDate, setRfqOpeningDate] = useState<Date>();
-    const [bacResolutionDate, setBacResolutionDate] = useState<Date>();
-    const [forwardedGsdDate, setForwardedGsdDate] = useState<Date>();
+    const [receivedPrDate, setReceivedPrDate] = useState<string>(draft?.receivedPrDate || '');
+    const [prDeliberatedDate, setPrDeliberatedDate] = useState<string>(draft?.prDeliberatedDate || '');
+    const [publishedDate, setPublishedDate] = useState<string>(draft?.publishedDate || '');
+    const [rfqCanvassDate, setRfqCanvassDate] = useState<string>(draft?.rfqCanvassDate || '');
+    const [rfqOpeningDate, setRfqOpeningDate] = useState<string>(draft?.rfqOpeningDate || '');
+    const [bacResolutionDate, setBacResolutionDate] = useState<string>(draft?.bacResolutionDate || '');
+    const [forwardedGsdDate, setForwardedGsdDate] = useState<string>(draft?.forwardedGsdDate || '');
+    const [poNtpForwardedGsdDate, setPoNtpForwardedGsdDate] = useState<string>(draft?.poNtpForwardedGsdDate || '');
 
     // Monitoring Dates - Regular Bidding specific
-    const [preBidDate, setPreBidDate] = useState<Date>();
-    const [bidOpeningDate, setBidOpeningDate] = useState<Date>();
-    const [bidEvaluationDate, setBidEvaluationDate] = useState<Date>();
-    const [postQualDate, setPostQualDate] = useState<Date>();
-    const [postQualReportDate, setPostQualReportDate] = useState<Date>();
-    const [forwardedOapiDate, setForwardedOapiDate] = useState<Date>();
-    const [noaDate, setNoaDate] = useState<Date>();
-    const [contractDate, setContractDate] = useState<Date>();
-    const [ntpDate, setNtpDate] = useState<Date>();
-    const [awardedToDate, setAwardedToDate] = useState<Date>();
+    const [preBidDate, setPreBidDate] = useState<string>(draft?.preBidDate || '');
+    const [bidOpeningDate, setBidOpeningDate] = useState<string>(draft?.bidOpeningDate || '');
+    const [bidEvaluationDate, setBidEvaluationDate] = useState<string>(draft?.bidEvaluationDate || '');
+    const [postQualDate, setPostQualDate] = useState<string>(draft?.postQualDate || '');
+    const [postQualReportDate, setPostQualReportDate] = useState<string>(draft?.postQualReportDate || '');
+    const [forwardedOapiDate, setForwardedOapiDate] = useState<string>(draft?.forwardedOapiDate || '');
+    const [noaDate, setNoaDate] = useState<string>(draft?.noaDate || '');
+    const [contractDate, setContractDate] = useState<string>(draft?.contractDate || '');
+    const [ntpDate, setNtpDate] = useState<string>(draft?.ntpDate || '');
+    const [awardedToDate, setAwardedToDate] = useState<string>(draft?.awardedToDate || '');
 
-    // Checklist State (for Regular Bidding mostly, but keeping structure)
-    // We'll treat checklist items more as date tracking per user request
-    const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+    // Checklist State
+    const [checklist, setChecklist] = useState<Record<string, boolean>>(draft?.checklist || {});
 
-    // Monitoring Process Checkboxes for progression
-    // logic to disable steps based on previous steps
-
-
-
-    // Auto-generate Sequence based on PR Division and Year
+    // ── Save draft to localStorage whenever any field changes ─────────────────
     useEffect(() => {
-        if (prDivisionId && prYear) {
-            const div = divisions.find(d => d.id === prDivisionId);
-            if (!div) return;
+        saveDraft(userEmail, {
+            formMode, activeTab,
+            projectName, description, status, procurementProcessStatus,
+            dateStatusUpdated: dateStatusUpdated?.toISOString(),
+            urgencyLevel,
+            deadline: deadline?.toISOString(),
+            abc, bidAmount, supplier, staffIncharge,
+            borrowerName, borrowingDivisionId,
+            borrowedDate: borrowedDate?.toISOString(),
+            dateAdded: dateAdded?.toISOString(),
+            prFormat, prDivisionId, prMonth, prYear, prSequence,
+            selectedDivisionId,
+            storageMode, cabinetId, shelfId, folderId, boxId,
+            receivedPrDate: receivedPrDate,
+            prDeliberatedDate: prDeliberatedDate,
+            publishedDate: publishedDate,
+            rfqCanvassDate: rfqCanvassDate,
+            rfqOpeningDate: rfqOpeningDate,
+            bacResolutionDate: bacResolutionDate,
+            forwardedGsdDate: forwardedGsdDate,
+            preBidDate: preBidDate,
+            bidOpeningDate: bidOpeningDate,
+            bidEvaluationDate: bidEvaluationDate,
+            postQualDate: postQualDate,
+            postQualReportDate: postQualReportDate,
+            forwardedOapiDate: forwardedOapiDate,
+            noaDate: noaDate,
+            contractDate: contractDate,
+            ntpDate: ntpDate,
+            awardedToDate: awardedToDate,
+            checklist,
+        });
+    }, [
+        formMode, activeTab, projectName, description, status, procurementProcessStatus,
+        dateStatusUpdated, urgencyLevel, deadline, abc, bidAmount, supplier, staffIncharge,
+        borrowerName, borrowingDivisionId, borrowedDate, dateAdded,
+        prFormat, prDivisionId, prMonth, prYear, prSequence, selectedDivisionId,
+        storageMode, cabinetId, shelfId, folderId, boxId,
+        receivedPrDate, prDeliberatedDate, publishedDate, rfqCanvassDate,
+        rfqOpeningDate, bacResolutionDate, forwardedGsdDate, preBidDate,
+        bidOpeningDate, bidEvaluationDate, postQualDate, postQualReportDate,
+        forwardedOapiDate, noaDate, contractDate, ntpDate, awardedToDate, checklist,
+    ]);
 
-            const yearStr = `-${prYear}-`;
-            const divStr = `${div.abbreviation}-`;
+    // Live Validation for Duplicate PR
+    useEffect(() => {
+        const isPrComplete = prFormat === 'old'
+            ? !!(prDivisionId && prMonth && prYear && prSequence)
+            : !!(prMonth && prYear && prSequence);
 
-            const matching = procurements.filter(p =>
-                p.prNumber.startsWith(divStr) &&
-                p.prNumber.includes(yearStr)
-            );
-
-            let maxSeq = 0;
-            matching.forEach(p => {
-                const parts = p.prNumber.split('-');
-                if (parts.length >= 4) {
-                    const seq = parseInt(parts[3]);
-                    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-                }
-            });
-
-            setPrSequence((maxSeq + 1).toString().padStart(3, '0'));
+        if (!isPrComplete) {
+            setPrExists(null);
+            return;
         }
-    }, [prDivisionId, prYear, divisions, procurements, prMonth]);
 
+        const currentPrPreview = prFormat === 'old'
+            ? `${divisions.find(d => d.id === prDivisionId)?.abbreviation}-${prMonth}-${prYear.slice(-2)}-${prSequence}`
+            : `${prYear}-${prMonth}-${prSequence}`;
 
-    // Fetch Divisions
+        setIsCheckingPr(true);
+        const timer = setTimeout(() => {
+            const exists = procurements.some(p => p.prNumber === currentPrPreview);
+            setPrExists(exists);
+            setIsCheckingPr(false);
+        }, 500); // 500ms debounce/fake loading
+
+        return () => clearTimeout(timer);
+    }, [prFormat, prDivisionId, prMonth, prYear, prSequence, divisions, procurements]);
+
+    // ── Clear Form handler ────────────────────────────────────────────────────
+    const handleClearForm = useCallback(() => {
+        clearDraft(userEmail);
+        // Reset all form state to defaults
+        setFormMode('SVP');
+        setActiveTab('basic');
+        setProjectName('');
+        setDescription('');
+        setStatus('archived');
+        setProcurementProcessStatus('Not yet Acted');
+        setDateStatusUpdated(new Date());
+        setUrgencyLevel('Medium');
+        setDeadline(undefined);
+        setAbc('');
+        setBidAmount('');
+        setSupplier('');
+        setNotes('');
+        setStaffIncharge(user?.name || '');
+        setBorrowerName('');
+        setBorrowingDivisionId('');
+        setBorrowedDate(undefined);
+        setDateAdded(new Date());
+        setPrFormat('old');
+        setPrDivisionId('');
+        setPrMonth(format(new Date(), 'MMM').toUpperCase());
+        setPrYear(format(new Date(), 'yyyy'));
+        setPrSequence('001');
+        setSelectedDivisionId('');
+        setStorageMode('shelf');
+        setCabinetId('');
+        setShelfId('');
+        setFolderId('');
+        setBoxId('');
+        setReceivedPrDate('');
+        setPrDeliberatedDate('');
+        setPublishedDate('');
+        setRfqCanvassDate('');
+        setRfqOpeningDate('');
+        setBacResolutionDate('');
+        setForwardedGsdDate('');
+        setPoNtpForwardedGsdDate('');
+        setPreBidDate('');
+        setBidOpeningDate('');
+        setBidEvaluationDate('');
+        setPostQualDate('');
+        setPostQualReportDate('');
+        setForwardedOapiDate('');
+        setNoaDate('');
+        setContractDate('');
+        setNtpDate('');
+        setAwardedToDate('');
+        setChecklist({});
+        // Re-enable auto-sequence calculation on clear
+        userEditedSequence.current = false;
+        toast.success('Form cleared');
+    }, [userEmail, user?.name]);
+
+    // Reset the edit-guard whenever the structural PR fields change,
+    // so that switching division/format/year/month auto-recalculates
+    // the sequence even if the user had previously typed something.
     useEffect(() => {
-        const unsub = onDivisionsChange(setDivisions);
-        return () => unsub();
+        userEditedSequence.current = false;
+    }, [prFormat, prDivisionId, prYear, prMonth]);
+
+
+    // Auto-generate Sequence based on PR format, Division (old only), and Year.
+    // The guard `userEditedSequence.current` prevents this effect from overwriting
+    // a value the user explicitly typed. It is reset when the structural fields
+    // (division / format / year / month) change, so the sequence auto-updates
+    // when those pivot fields change but NOT when Firebase pushes a new record.
+    useEffect(() => {
+        // If the user manually edited the sequence, respect their choice.
+        if (userEditedSequence.current) return;
+
+        if (prYear) {
+            if (prFormat === 'old') {
+                // Old format: DIV-MMM-YY-SEQ — needs division
+                if (!prDivisionId) return;
+                const div = divisions.find(d => d.id === prDivisionId);
+                if (!div) return;
+
+                const yearStr = `-${prYear}-`;
+                const divStr = `${div.abbreviation}-`;
+
+                const matching = procurements.filter(p =>
+                    p.prNumber.startsWith(divStr) &&
+                    p.prNumber.includes(yearStr)
+                );
+
+                let maxSeq = 0;
+                matching.forEach(p => {
+                    const parts = p.prNumber.split('-');
+                    if (parts.length >= 4) {
+                        const seq = parseInt(parts[3]);
+                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                    }
+                });
+
+                setPrSequence((maxSeq + 1).toString().padStart(3, '0'));
+            } else {
+                // New format: YY-MMM-SEQ — no division needed
+                const yearStr = `${prYear}-`;
+
+                const matching = procurements.filter(p =>
+                    p.prNumber.startsWith(yearStr)
+                );
+
+                let maxSeq = 0;
+                matching.forEach(p => {
+                    const parts = p.prNumber.split('-');
+                    if (parts.length >= 3) {
+                        const seq = parseInt(parts[2]);
+                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                    }
+                });
+
+                setPrSequence((maxSeq + 1).toString().padStart(3, '0'));
+            }
+        }
+        // NOTE: `procurements` is intentionally omitted from this dep array.
+        // Including it causes the sequence to be reset every time any user saves
+        // a record (because Firebase re-fires and updates the context). The initial
+        // calculation uses the loaded list, and the fresh read at submit-time
+        // (see handleSubmit) handles the concurrent-user race condition.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [prFormat, prDivisionId, prYear, divisions, prMonth]);
+
+
+    // Load Initial Data
+    useEffect(() => {
+        const unsubDivisions = onDivisionsChange(setDivisions);
+        const unsubSuppliers = onSuppliersChange(setSuppliers);
+
+        // Removed other subs as they are managed by DataContext
+        return () => {
+            unsubDivisions();
+            unsubSuppliers();
+        };
     }, []);
 
     // Update available shelves (Cabinets) when cabinet (Drawer) changes
@@ -206,10 +420,19 @@ const AddProcurement: React.FC = () => {
             setAvailableBoxes(boxes.filter(b => b.shelfId === shelfId));
 
             if (storageMode === 'shelf') {
-                setAvailableFolders(folders.filter(f => f.shelfId === shelfId && !f.boxId)); // Only direct folders
+                setIsFoldersLoading(true);
+                setAvailableFolders([]); // clear stale folders immediately
+                const timer = setTimeout(() => {
+                    setAvailableFolders(folders.filter(f => f.shelfId === shelfId && !f.boxId)); // Only direct folders
+                    setIsFoldersLoading(false);
+                }, 300);
+                setBoxId('');
+                setFolderId('');
+                return () => clearTimeout(timer);
+            } else {
+                setBoxId('');
+                setFolderId('');
             }
-            setBoxId('');
-            setFolderId('');
         } else {
             setAvailableBoxes([]);
             if (storageMode === 'shelf') setAvailableFolders([]);
@@ -220,19 +443,32 @@ const AddProcurement: React.FC = () => {
     useEffect(() => {
         if (storageMode === 'box') {
             if (boxId) {
-                setAvailableFolders(folders.filter(f => f.boxId === boxId));
+                setIsFoldersLoading(true);
+                setAvailableFolders([]); // clear stale folders immediately
+                const timer = setTimeout(() => {
+                    setAvailableFolders(folders.filter(f => f.boxId === boxId));
+                    setIsFoldersLoading(false);
+                }, 300);
+                setFolderId('');
+                return () => clearTimeout(timer);
             } else {
                 setAvailableFolders([]);
+                setFolderId('');
             }
-            setFolderId('');
         }
     }, [boxId, folders, storageMode]);
 
     // Re-trigger folder update when storageMode changes (to switch between Shelf folders and Box folders)
     useEffect(() => {
         if (storageMode === 'shelf' && shelfId) {
-            setAvailableFolders(folders.filter(f => f.shelfId === shelfId && !f.boxId));
+            setIsFoldersLoading(true);
+            setAvailableFolders([]);
+            const timer = setTimeout(() => {
+                setAvailableFolders(folders.filter(f => f.shelfId === shelfId && !f.boxId));
+                setIsFoldersLoading(false);
+            }, 300);
             setBoxId(''); // Clear box if switching to shelf mode
+            return () => clearTimeout(timer);
         } else if (storageMode === 'box') {
             setFolderId(''); // Clear folder when creating/switching to box mode until box is selected
             setAvailableFolders([]);
@@ -270,16 +506,84 @@ const AddProcurement: React.FC = () => {
             return;
         }
         // Validate PR Number construction
-        const prDivisionAbbr = divisions.find(d => d.id === prDivisionId)?.abbreviation || 'XXX';
-        const constructedPrNumber = prDivisionId && prMonth && prYear && prSequence
-            ? `${prDivisionAbbr}-${prMonth}-${prYear}-${prSequence}`
-            : '';
-        if (!constructedPrNumber || !prDivisionId) {
-            toast.error('Please complete all PR Number fields (Division, Month, Year, Sequence)');
-            return;
+        if (prFormat === 'old') {
+            if (!prDivisionId || !prMonth || !prYear || !prSequence) {
+                toast.error('Please complete all PR Number fields (Division, Month, Year, Sequence)');
+                return;
+            }
+        } else {
+            if (!prMonth || !prYear || !prSequence) {
+                toast.error('Please complete all PR Number fields (Month, Year, Sequence)');
+                return;
+            }
         }
 
-        // ABC and Bid Amount Validation
+        // ── Load-Balancing: Fresh read from Firebase right before submit ──────
+        // This prevents the race condition where two concurrent users both see
+        // the same cached "next sequence" and submit duplicate PR numbers.
+        let finalSequence = prSequence;
+        try {
+            const freshProcurements = await getProcurements();
+            const prDivisionAbbr = divisions.find(d => d.id === prDivisionId)?.abbreviation || '';
+
+            if (prFormat === 'old' && prDivisionAbbr) {
+                const yearStr = `-${prYear}-`;
+                const divStr = `${prDivisionAbbr}-`;
+                const matching = freshProcurements.filter(p =>
+                    p.prNumber.startsWith(divStr) && p.prNumber.includes(yearStr)
+                );
+                let maxSeq = 0;
+                matching.forEach(p => {
+                    const parts = p.prNumber.split('-');
+                    if (parts.length >= 4) {
+                        const seq = parseInt(parts[3]);
+                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                    }
+                });
+                const freshNext = (maxSeq + 1).toString().padStart(3, '0');
+                // If the fresh max is higher than what the user sees, bump up
+                if (parseInt(freshNext) > parseInt(prSequence)) {
+                    finalSequence = freshNext;
+                    toast.info(`⚡ Sequence updated to ${freshNext} to avoid conflict with another user's record.`);
+                }
+            } else if (prFormat === 'new') {
+                const yearStr = `${prYear}-`;
+                const matching = freshProcurements.filter(p => p.prNumber.startsWith(yearStr));
+                let maxSeq = 0;
+                matching.forEach(p => {
+                    const parts = p.prNumber.split('-');
+                    if (parts.length >= 3) {
+                        const seq = parseInt(parts[2]);
+                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                    }
+                });
+                const freshNext = (maxSeq + 1).toString().padStart(3, '0');
+                if (parseInt(freshNext) > parseInt(prSequence)) {
+                    finalSequence = freshNext;
+                    toast.info(`⚡ Sequence updated to ${freshNext} to avoid conflict with another user's record.`);
+                }
+            }
+        } catch (err) {
+            // If fresh read fails, fall back to cached value (still saves)
+            console.warn('Could not fetch fresh procurements for race-condition check:', err);
+        }
+
+        // Build the final PR number using the confirmed sequence
+        const prDivisionAbbrFinal = divisions.find(d => d.id === prDivisionId)?.abbreviation || 'XXX';
+        let constructedPrNumber = '';
+        if (prFormat === 'old') {
+            constructedPrNumber = `${prDivisionAbbrFinal}-${prMonth}-${prYear.slice(-2)}-${finalSequence}`;
+        } else {
+            constructedPrNumber = `${prYear}-${prMonth}-${finalSequence}`;
+        }
+
+        // Check for duplicate PR number (warning only, still saves)
+        const isDuplicate = procurements.some(p => p.prNumber === constructedPrNumber);
+        if (isDuplicate) {
+            toast.warning(`⚠️ PR Number "${constructedPrNumber}" already exists. Saving anyway...`);
+        }
+
+
         const cleanAbc = abc ? parseFloat(removeCommas(abc)) : 0;
         const cleanBid = bidAmount ? parseFloat(removeCommas(bidAmount)) : 0;
 
@@ -347,7 +651,8 @@ const AddProcurement: React.FC = () => {
                 procurementStatus: procurementProcessStatus,
                 dateStatusUpdated: dateStatusUpdated?.toISOString(),
 
-                urgencyLevel: 'medium',
+                urgencyLevel,
+                deadline: deadline?.toISOString(),
                 dateAdded: dateAdded ? dateAdded.toISOString() : new Date().toISOString(),
                 disposalDate,
 
@@ -355,31 +660,39 @@ const AddProcurement: React.FC = () => {
                 abc: abc ? parseFloat(removeCommas(abc)) : undefined,
                 bidAmount: bidAmount ? parseFloat(removeCommas(bidAmount)) : undefined,
                 supplier: supplier || undefined,
-                notes,
+                staffIncharge: staffIncharge || undefined,
+                borrowerName: borrowerName || undefined,
                 remarks: description, // Mapping description to remarks explicitly too
 
                 // Dates - Common
-                receivedPrDate: receivedPrDate ? receivedPrDate.toISOString() : undefined,
-                publishedDate: publishedDate?.toISOString(),
-                rfqCanvassDate: rfqCanvassDate?.toISOString(),
-                rfqOpeningDate: rfqOpeningDate?.toISOString(),
-                bacResolutionDate: bacResolutionDate?.toISOString(),
-                forwardedGsdDate: forwardedGsdDate?.toISOString(),
+                receivedPrDate: receivedPrDate || undefined,
+                prDeliberatedDate: prDeliberatedDate || undefined,
+                publishedDate: publishedDate || undefined,
+                rfqCanvassDate: rfqCanvassDate || undefined,
+                rfqOpeningDate: rfqOpeningDate || undefined,
+                bacResolutionDate: bacResolutionDate || undefined,
+                forwardedGsdDate: forwardedGsdDate || undefined,
+                poNtpForwardedGsdDate: poNtpForwardedGsdDate || undefined,
 
                 // Dates - Regular
-                preBidDate: preBidDate?.toISOString(),
-                bidOpeningDate: bidOpeningDate?.toISOString(),
-                bidEvaluationDate: bidEvaluationDate?.toISOString(),
-                postQualDate: postQualDate?.toISOString(),
-                postQualReportDate: postQualReportDate?.toISOString(),
-                forwardedOapiDate: forwardedOapiDate?.toISOString(),
-                noaDate: noaDate?.toISOString(),
-                contractDate: contractDate?.toISOString(),
-                ntpDate: ntpDate?.toISOString(),
-                awardedToDate: awardedToDate?.toISOString(),
+                preBidDate: preBidDate,
+                bidOpeningDate: bidOpeningDate,
+                bidEvaluationDate: bidEvaluationDate,
+                postQualDate: postQualDate,
+                postQualReportDate: postQualReportDate,
+                forwardedOapiDate: forwardedOapiDate,
+                noaDate: noaDate,
+                contractDate: contractDate,
+                ntpDate: ntpDate,
+                awardedToDate: awardedToDate,
 
                 checklist: checklist, // If specialized checks needed
                 tags: [],
+
+                // Borrowing Info
+                borrowedBy: status === 'active' ? borrowerName : undefined,
+                borrowerDivision: status === 'active' ? divisions.find(d => d.id === borrowingDivisionId)?.name : undefined,
+                borrowedDate: status === 'active' && borrowedDate ? borrowedDate.toISOString() : undefined,
             };
 
             await addProcurement(
@@ -389,9 +702,10 @@ const AddProcurement: React.FC = () => {
             );
 
             toast.success('File record added successfully');
+            clearDraft(userEmail); // Clear saved draft after successful submit
             // Navigate to appropriate list
             if (formMode === 'SVP') {
-                navigate('/procurement/list?type=SVP'); // Pending implementation of dedicated route
+                navigate('/procurement/list?type=SVP');
             } else {
                 navigate('/procurement/list?type=Regular');
             }
@@ -406,7 +720,7 @@ const AddProcurement: React.FC = () => {
 
     // Tab validation: basic tab requires projectName, PR details, selected division, and ABC, Staff, Status, Date
     const canGoToMonitoring = !!projectName.trim() &&
-        !!prDivisionId &&
+        (prFormat === 'new' || !!prDivisionId) &&
         !!prMonth &&
         !!prYear &&
         !!prSequence &&
@@ -429,19 +743,33 @@ const AddProcurement: React.FC = () => {
                     <h1 className="text-3xl font-bold text-white">Add Procurement</h1>
                     <p className="text-slate-400 mt-1">Create a new record</p>
                 </div>
-                <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
-                    <button
-                        onClick={() => setFormMode('SVP')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'SVP' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Clear Form Button */}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearForm}
+                        className="flex items-center gap-2 border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-400 transition-all"
                     >
-                        Small Value Procurement
-                    </button>
-                    <button
-                        onClick={() => setFormMode('Regular')}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'Regular' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        Regular Bidding
-                    </button>
+                        <Trash2 className="h-4 w-4" />
+                        Clear Form
+                    </Button>
+                    {/* Procurement Type Toggle */}
+                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
+                        <button
+                            onClick={() => setFormMode('SVP')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'SVP' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Small Value Procurement
+                        </button>
+                        <button
+                            onClick={() => setFormMode('Regular')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'Regular' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Regular Bidding
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -498,24 +826,48 @@ const AddProcurement: React.FC = () => {
 
                             {/* PR Number Construction */}
                             <div className="p-4 rounded-lg bg-[#1e293b]/50 border border-slate-700/50 space-y-4">
-                                <Label className="text-slate-300">PR Number Construction</Label>
-                                <div className="grid gap-4 md:grid-cols-4 items-end">
-                                    {/* Division Acronym */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs text-slate-400">Division (for PR Number)</Label>
-                                        <Select value={prDivisionId} onValueChange={setPrDivisionId}>
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectValue placeholder="Select Division" />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
-                                                    <SelectItem key={div.id} value={div.id}>
-                                                        {div.abbreviation} - {div.name}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <Label className="text-slate-300">PR Number Construction</Label>
+                                    {/* Format Toggle */}
+                                    <div className="flex bg-[#0f172a] p-0.5 rounded-lg border border-slate-700 text-xs">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPrFormat('old')}
+                                            className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'old' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                        >
+                                            Old (Div-Mon-Yr-#)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPrFormat('new')}
+                                            className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'new' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                        >
+                                            New (Yr-Mon-#)
+                                        </button>
                                     </div>
+                                </div>
+
+                                <div className={`grid gap-4 items-end ${prFormat === 'old' ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+                                    {/* Division Acronym — only for Old format */}
+                                    {prFormat === 'old' && (
+                                        <div className="space-y-2">
+                                            <Label className="text-xs text-slate-400">Division <span className="text-red-400">*</span></Label>
+                                            <Select value={prDivisionId} onValueChange={setPrDivisionId}>
+                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                                    <SelectValue placeholder="Select Division" />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                                    {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
+                                                        <SelectItem key={div.id} value={div.id}>
+                                                            {div.name} ({div.abbreviation})
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
 
                                     {/* Month */}
                                     <div className="space-y-2">
@@ -537,7 +889,7 @@ const AddProcurement: React.FC = () => {
                                         <Label className="text-xs text-slate-400">Year (YY)</Label>
                                         <Input
                                             type="text"
-                                            maxLength={2}
+                                            maxLength={4}
                                             value={prYear}
                                             onChange={(e) => setPrYear(e.target.value)}
                                             className="bg-[#1e293b] border-slate-700 text-white"
@@ -549,13 +901,43 @@ const AddProcurement: React.FC = () => {
                                         <Label className="text-xs text-slate-400">Sequence</Label>
                                         <Input
                                             value={prSequence}
-                                            onChange={(e) => setPrSequence(e.target.value)}
+                                            onChange={(e) => {
+                                                // Mark that the user has taken ownership of the sequence.
+                                                // This prevents Firebase context updates from overwriting it.
+                                                userEditedSequence.current = true;
+                                                setPrSequence(e.target.value);
+                                            }}
+                                            maxLength={7}
                                             className="bg-[#1e293b] border-slate-700 text-white"
                                         />
                                     </div>
                                 </div>
-                                <div className="mt-2 text-sm text-slate-400">
-                                    Preview: <span className="font-mono text-emerald-400 font-bold ml-2">{prDivisionId && divisions.find(d => d.id === prDivisionId) ? `${divisions.find(d => d.id === prDivisionId)?.abbreviation}-${prMonth}-${prYear}-${prSequence}` : 'XXX-XXX-XX-XXX'}</span>
+
+                                <div className="mt-2 text-sm text-slate-400 flex items-center justify-between">
+                                    <div>
+                                        Preview: <span className="font-mono text-emerald-400 font-bold ml-2">
+                                            {prFormat === 'old'
+                                                ? (prDivisionId && divisions.find(d => d.id === prDivisionId)
+                                                    ? `${divisions.find(d => d.id === prDivisionId)?.abbreviation}-${prMonth}-${prYear.slice(-2)}-${prSequence}`
+                                                    : 'XXX-XXX-XX-XXX')
+                                                : (prYear && prMonth && prSequence ? `${prYear}-${prMonth}-${prSequence}` : 'XXXX-XXX-XXXX')
+                                            }
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <div className="flex items-center gap-2">
+                                            {isCheckingPr ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
+                                                    <span className="text-xs text-slate-400 italic">Validating ID...</span>
+                                                </>
+                                            ) : (prExists !== null && (
+                                                prExists
+                                                    ? <span className="text-xs text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded animate-pulse">PR Existed</span>
+                                                    : <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">PR still not on Records</span>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -568,7 +950,7 @@ const AddProcurement: React.FC = () => {
                                     </SelectTrigger>
                                     <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
                                         {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
-                                            <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                                            <SelectItem key={div.id} value={div.id}>{div.name} ({div.abbreviation})</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -627,13 +1009,20 @@ const AddProcurement: React.FC = () => {
 
                                 <div className="grid gap-6 md:grid-cols-2 mt-2">
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Supplier / Awarded To</Label>
-                                        <Input
-                                            value={supplier}
-                                            onChange={(e) => setSupplier(e.target.value)}
-                                            placeholder="Enter supplier or company name..."
-                                            className="bg-[#1e293b] border-slate-700 text-white"
-                                        />
+                                        <Label className="text-slate-300">Supplier / Awarded To <span className="text-slate-500 text-xs">(Optional)</span></Label>
+                                        <Select value={supplier || 'none'} onValueChange={(val) => setSupplier(val === 'none' ? '' : val)}>
+                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                                <SelectValue placeholder="Select Supplier" />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                                <SelectItem value="none" className="text-slate-400 italic">No Supplier selected</SelectItem>
+                                                {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
+                                                    <SelectItem key={s.id} value={s.id}>
+                                                        {s.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </div>
                                     <div className="space-y-2">
                                         <Label className="text-slate-300">Staff In Charge <span className="text-red-400">*</span></Label>
@@ -643,17 +1032,6 @@ const AddProcurement: React.FC = () => {
                                             className="bg-[#1e293b] border-slate-700 text-white"
                                         />
                                     </div>
-                                </div>
-
-                                <div className="space-y-2 mt-4">
-                                    <Label className="text-slate-300">Notes <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                    <Textarea
-                                        value={notes}
-                                        onChange={(e) => setNotes(e.target.value)}
-                                        placeholder="Enter any additional notes or important information..."
-                                        className="bg-[#1e293b] border-slate-700 text-white min-h-[80px] resize-y"
-                                        rows={3}
-                                    />
                                 </div>
                             </div>
 
@@ -687,21 +1065,23 @@ const AddProcurement: React.FC = () => {
                                 <div className="space-y-2">
                                     <Label className="text-slate-300">Date Status Updated <span className="text-red-400">*</span></Label>
                                     <Input
-                                        type="date"
-                                        defaultValue={dateStatusUpdated ? format(dateStatusUpdated, "yyyy-MM-dd") : ""}
+                                        type="text"
+                                        defaultValue={dateStatusUpdated ? format(dateStatusUpdated, "MM/dd/yyyy") : format(new Date(), "MM/dd/yyyy")}
                                         onChange={(e) => {
                                             const val = e.target.value;
-                                            if (val && val.length === 10) {
+                                            try {
                                                 const d = new Date(val);
-                                                if (!isNaN(d.getTime())) setDateStatusUpdated(d);
-                                            } else if (!val) {
-                                                setDateStatusUpdated(undefined);
-                                            }
+                                                if (!isNaN(d.getTime())) {
+                                                    setDateStatusUpdated(d);
+                                                }
+                                            } catch (err) { }
                                         }}
-                                        className="bg-[#1e293b] border-slate-700 text-white [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-60"
+                                        className="bg-[#1e293b] border-slate-700 text-white [color-scheme:dark]"
                                     />
                                 </div>
                             </div>
+
+
                         </CardContent>
                     </Card>
 
@@ -811,11 +1191,76 @@ const AddProcurement: React.FC = () => {
                     {/* TAB 2: Monitoring Process */}
                     <Card className="border-none bg-[#0f172a] shadow-lg">
                         <CardContent className="p-6 space-y-6">
-                            <div className="border-b border-slate-800 pb-2">
-                                <h3 className="text-lg font-semibold text-white">
-                                    {formMode === 'Regular' ? 'Regular Bidding Monitoring Progress' : 'SVP Monitoring Process'}
-                                    <span className="ml-2 text-slate-500 text-xs font-normal">(Optional — check dates as they are completed)</span>
-                                </h3>
+                            <div className="border-b border-slate-800 pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-white">
+                                        {formMode === 'Regular' ? 'Regular Bidding Monitoring Progress' : 'SVP Monitoring Process'}
+                                        <span className="ml-2 text-slate-500 text-xs font-normal">(Optional — check dates as they are completed)</span>
+                                    </h3>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        onClick={() => {
+                                            const today = format(new Date(), 'MM/dd/yyyy');
+                                            setReceivedPrDate(today);
+                                            setPrDeliberatedDate(today);
+                                            setPublishedDate(today);
+                                            if (formMode === 'Regular') {
+                                                setPreBidDate(today);
+                                                setBidOpeningDate(today);
+                                                setBidEvaluationDate(today);
+                                                setBacResolutionDate(today);
+                                                setPostQualDate(today);
+                                                setPostQualReportDate(today);
+                                                setForwardedOapiDate(today);
+                                                setNoaDate(today);
+                                                setContractDate(today);
+                                                setNtpDate(today);
+                                                setAwardedToDate(today);
+                                            } else {
+                                                setRfqCanvassDate(today);
+                                                setRfqOpeningDate(today);
+                                                setBacResolutionDate(today);
+                                                setForwardedGsdDate(today);
+                                                setPoNtpForwardedGsdDate(today);
+                                            }
+                                        }}
+                                    >
+                                        Check All
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        onClick={() => {
+                                            setReceivedPrDate('');
+                                            setPrDeliberatedDate('');
+                                            setPublishedDate('');
+                                            setPreBidDate('');
+                                            setBidOpeningDate('');
+                                            setBidEvaluationDate('');
+                                            setBacResolutionDate('');
+                                            setPostQualDate('');
+                                            setPostQualReportDate('');
+                                            setForwardedOapiDate('');
+                                            setNoaDate('');
+                                            setContractDate('');
+                                            setNtpDate('');
+                                            setAwardedToDate('');
+                                            setRfqCanvassDate('');
+                                            setRfqOpeningDate('');
+                                            setForwardedGsdDate('');
+                                            setPoNtpForwardedGsdDate('');
+                                        }}
+                                    >
+                                        Uncheck All
+                                    </Button>
+                                </div>
                             </div>
 
                             <div className="space-y-6 pt-4 pb-6">
@@ -824,34 +1269,34 @@ const AddProcurement: React.FC = () => {
                                         {/* Pre-Procurement */}
                                         <div className="space-y-2">
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <MonitoringDateField label="Received PR to Action" date={receivedPrDate} setDate={(d: Date | undefined) => { setReceivedPrDate(d); if (!d) { setPrDeliberatedDate(undefined); setPublishedDate(undefined); setPreBidDate(undefined); setBidOpeningDate(undefined); setBidEvaluationDate(undefined); setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} activeColor="blue" />
-                                                <MonitoringDateField label="PR Deliberated" date={prDeliberatedDate} setDate={(d: Date | undefined) => { setPrDeliberatedDate(d); if (!d) { setPublishedDate(undefined); setPreBidDate(undefined); setBidOpeningDate(undefined); setBidEvaluationDate(undefined); setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!receivedPrDate} activeColor="blue" />
-                                                <MonitoringDateField label="Published" date={publishedDate} setDate={(d: Date | undefined) => { setPublishedDate(d); if (!d) { setPreBidDate(undefined); setBidOpeningDate(undefined); setBidEvaluationDate(undefined); setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!prDeliberatedDate} activeColor="blue" />
+                                                <MonitoringDateField label="Received PR to Action" value={receivedPrDate} setValue={(v: string) => { setReceivedPrDate(v); if (!v) { setPrDeliberatedDate(''); setPublishedDate(''); setPreBidDate(''); setBidOpeningDate(''); setBidEvaluationDate(''); setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} activeColor="blue" />
+                                                <MonitoringDateField label="PR Deliberated" value={prDeliberatedDate} setValue={(v: string) => { setPrDeliberatedDate(v); if (!v) { setPublishedDate(''); setPreBidDate(''); setBidOpeningDate(''); setBidEvaluationDate(''); setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!receivedPrDate} activeColor="blue" />
+                                                <MonitoringDateField label="Published" value={publishedDate} setValue={(v: string) => { setPublishedDate(v); if (!v) { setPreBidDate(''); setBidOpeningDate(''); setBidEvaluationDate(''); setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!prDeliberatedDate} activeColor="blue" />
                                             </div>
                                         </div>
 
                                         {/* Bidding Proper */}
                                         <div className="space-y-2">
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <MonitoringDateField label="Pre-Bid" date={preBidDate} setDate={(d: Date | undefined) => { setPreBidDate(d); if (!d) { setBidOpeningDate(undefined); setBidEvaluationDate(undefined); setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!publishedDate} activeColor="purple" />
-                                                <MonitoringDateField label="Bid Opening" date={bidOpeningDate} setDate={(d: Date | undefined) => { setBidOpeningDate(d); if (!d) { setBidEvaluationDate(undefined); setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!preBidDate} activeColor="purple" />
-                                                <MonitoringDateField label="Bid Evaluation Report" date={bidEvaluationDate} setDate={(d: Date | undefined) => { setBidEvaluationDate(d); if (!d) { setBacResolutionDate(undefined); setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!bidOpeningDate} activeColor="purple" />
+                                                <MonitoringDateField label="Pre-Bid" value={preBidDate} setValue={(v: string) => { setPreBidDate(v); if (!v) { setBidOpeningDate(''); setBidEvaluationDate(''); setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!publishedDate} activeColor="purple" />
+                                                <MonitoringDateField label="Bid Opening" value={bidOpeningDate} setValue={(v: string) => { setBidOpeningDate(v); if (!v) { setBidEvaluationDate(''); setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!preBidDate} activeColor="purple" />
+                                                <MonitoringDateField label="Bid Evaluation Report" value={bidEvaluationDate} setValue={(v: string) => { setBidEvaluationDate(v); if (!v) { setBacResolutionDate(''); setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!bidOpeningDate} activeColor="purple" />
                                             </div>
                                         </div>
 
                                         {/* Award */}
                                         <div className="space-y-2">
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <MonitoringDateField label="BAC Resolution" date={bacResolutionDate} setDate={(d: Date | undefined) => { setBacResolutionDate(d); if (!d) { setPostQualDate(undefined); setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!bidEvaluationDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Post Qualification" date={postQualDate} setDate={(d: Date | undefined) => { setPostQualDate(d); if (!d) { setPostQualReportDate(undefined); setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!bacResolutionDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Post Qualification Report" date={postQualReportDate} setDate={(d: Date | undefined) => { setPostQualReportDate(d); if (!d) { setForwardedOapiDate(undefined); setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!postQualDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Forwarded to OAPIA" date={forwardedOapiDate} setDate={(d: Date | undefined) => { setForwardedOapiDate(d); if (!d) { setNoaDate(undefined); setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!postQualReportDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Notice of Award" date={noaDate} setDate={(d: Date | undefined) => { setNoaDate(d); if (!d) { setContractDate(undefined); setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!forwardedOapiDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Contract Date" date={contractDate} setDate={(d: Date | undefined) => { setContractDate(d); if (!d) { setNtpDate(undefined); setAwardedToDate(undefined); } }} isDisabled={!noaDate} activeColor="emerald" />
-                                                <MonitoringDateField label="Notice to Proceed" date={ntpDate} setDate={(d: Date | undefined) => { setNtpDate(d); if (!d) { setAwardedToDate(undefined); } }} isDisabled={!contractDate} activeColor="emerald" />
+                                                <MonitoringDateField label="BAC Resolution" value={bacResolutionDate} setValue={(v: string) => { setBacResolutionDate(v); if (!v) { setPostQualDate(''); setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!bidEvaluationDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Post Qualification" value={postQualDate} setValue={(v: string) => { setPostQualDate(v); if (!v) { setPostQualReportDate(''); setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!bacResolutionDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Post Qualification Report" value={postQualReportDate} setValue={(v: string) => { setPostQualReportDate(v); if (!v) { setForwardedOapiDate(''); setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!postQualDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Forwarded to OAPIA" value={forwardedOapiDate} setValue={(v: string) => { setForwardedOapiDate(v); if (!v) { setNoaDate(''); setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!postQualReportDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Notice of Award" value={noaDate} setValue={(v: string) => { setNoaDate(v); if (!v) { setContractDate(''); setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!forwardedOapiDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Contract Date" value={contractDate} setValue={(v: string) => { setContractDate(v); if (!v) { setNtpDate(''); setAwardedToDate(''); } }} isDisabled={!noaDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Notice to Proceed" value={ntpDate} setValue={(v: string) => { setNtpDate(v); if (!v) { setAwardedToDate(''); } }} isDisabled={!contractDate} activeColor="emerald" />
 
                                                 {/* Final Step: Awarded to Supplier Date */}
-                                                <MonitoringDateField label="Awarded to Supplier" date={awardedToDate} setDate={(d: Date | undefined) => setAwardedToDate(d)} isDisabled={!ntpDate} activeColor="emerald" />
+                                                <MonitoringDateField label="Awarded to Supplier" value={awardedToDate} setValue={(v: string) => setAwardedToDate(v)} isDisabled={!ntpDate} activeColor="emerald" />
                                             </div>
                                         </div>
                                     </>
@@ -860,19 +1305,50 @@ const AddProcurement: React.FC = () => {
                                         {/* Pre-Procurement */}
                                         <div className="space-y-2">
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <MonitoringDateField label="Received PR to Action" date={receivedPrDate} setDate={(d: Date | undefined) => { setReceivedPrDate(d); if (!d) { setPrDeliberatedDate(undefined); setPublishedDate(undefined); setRfqCanvassDate(undefined); setRfqOpeningDate(undefined); setBacResolutionDate(undefined); setForwardedGsdDate(undefined); } }} activeColor="blue" />
-                                                <MonitoringDateField label="PR Deliberated" date={prDeliberatedDate} setDate={(d: Date | undefined) => { setPrDeliberatedDate(d); if (!d) { setPublishedDate(undefined); setRfqCanvassDate(undefined); setRfqOpeningDate(undefined); setBacResolutionDate(undefined); setForwardedGsdDate(undefined); } }} isDisabled={!receivedPrDate} activeColor="blue" />
-                                                <MonitoringDateField label="Published" date={publishedDate} setDate={(d: Date | undefined) => { setPublishedDate(d); if (!d) { setRfqCanvassDate(undefined); setRfqOpeningDate(undefined); setBacResolutionDate(undefined); setForwardedGsdDate(undefined); } }} isDisabled={!prDeliberatedDate} activeColor="blue" />
+                                                <MonitoringDateField label="Received PR to Action" value={receivedPrDate} setValue={(v: string) => {
+                                                    setReceivedPrDate(v); if (!v) {
+                                                        setPrDeliberatedDate(''); setPublishedDate(''); setRfqCanvassDate(''); setRfqOpeningDate(''); setBacResolutionDate(''); setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} activeColor="blue" />
+                                                <MonitoringDateField label="PR Deliberated" value={prDeliberatedDate} setValue={(v: string) => {
+                                                    setPrDeliberatedDate(v); if (!v) {
+                                                        setPublishedDate(''); setRfqCanvassDate(''); setRfqOpeningDate(''); setBacResolutionDate(''); setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} isDisabled={!receivedPrDate} activeColor="blue" />
+                                                <MonitoringDateField label="Published" value={publishedDate} setValue={(v: string) => {
+                                                    setPublishedDate(v); if (!v) {
+                                                        setRfqCanvassDate(''); setRfqOpeningDate(''); setBacResolutionDate(''); setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} isDisabled={!prDeliberatedDate} activeColor="blue" />
                                             </div>
                                         </div>
 
                                         {/* Canvassing */}
                                         <div className="space-y-2">
                                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <MonitoringDateField label="RFQ to Canvass" date={rfqCanvassDate} setDate={(d: Date | undefined) => { setRfqCanvassDate(d); if (!d) { setRfqOpeningDate(undefined); setBacResolutionDate(undefined); setForwardedGsdDate(undefined); } }} isDisabled={!publishedDate} activeColor="purple" />
-                                                <MonitoringDateField label="RFQ Opening" date={rfqOpeningDate} setDate={(d: Date | undefined) => { setRfqOpeningDate(d); if (!d) { setBacResolutionDate(undefined); setForwardedGsdDate(undefined); } }} isDisabled={!rfqCanvassDate} activeColor="purple" />
-                                                <MonitoringDateField label="BAC Resolution" date={bacResolutionDate} setDate={(d: Date | undefined) => { setBacResolutionDate(d); if (!d) { setForwardedGsdDate(undefined); } }} isDisabled={!rfqOpeningDate} activeColor="purple" />
-                                                <MonitoringDateField label="Forwarded to GSD for P.O" date={forwardedGsdDate} setDate={(d: Date | undefined) => { setForwardedGsdDate(d); }} isDisabled={!bacResolutionDate} activeColor="purple" />
+                                                <MonitoringDateField label="RFQ to Canvass" value={rfqCanvassDate} setValue={(v: string) => {
+                                                    setRfqCanvassDate(v); if (!v) {
+                                                        setRfqOpeningDate(''); setBacResolutionDate(''); setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} isDisabled={!publishedDate} activeColor="purple" />
+                                                <MonitoringDateField label="RFQ Opening" value={rfqOpeningDate} setValue={(v: string) => {
+                                                    setRfqOpeningDate(v); if (!v) {
+                                                        setBacResolutionDate(''); setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} isDisabled={!rfqCanvassDate} activeColor="purple" />
+                                                <MonitoringDateField label="BAC Resolution" value={bacResolutionDate} setValue={(v: string) => {
+                                                    setBacResolutionDate(v); if (!v) {
+                                                        setForwardedGsdDate('');
+                                                        setPoNtpForwardedGsdDate('');
+                                                    }
+                                                }} isDisabled={!rfqOpeningDate} activeColor="purple" />
+                                                <MonitoringDateField label="Forwarded to GSD for P.O" value={forwardedGsdDate} setValue={(v: string) => { setForwardedGsdDate(v); if (!v) { setPoNtpForwardedGsdDate(''); } }} isDisabled={!bacResolutionDate} activeColor="purple" />
+                                                <MonitoringDateField label="PO/NTP Forwarded to GSD" value={poNtpForwardedGsdDate} setValue={(v: string) => { setPoNtpForwardedGsdDate(v); }} isDisabled={!forwardedGsdDate} activeColor="purple" />
                                             </div>
                                         </div>
                                     </>
@@ -891,60 +1367,6 @@ const AddProcurement: React.FC = () => {
                         </Button>
                     </div>
                 </div>
-
-                {/* TAB 3 (cont): Documents â€” Additional Info + continuation */}
-                <div className={activeTab !== 'documents' ? 'hidden' : ''} id="tab-documents-extra">
-
-                    {/* TAB 3 (cont): Documents — Additional Info */}
-                    <Card className="border-none bg-[#0f172a] shadow-lg">
-                        <CardContent className="p-6 space-y-6">
-                            <h3 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">
-                                Additional Information
-                            </h3>
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">Supplier / Awarded To <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                    <Input
-                                        value={supplier}
-                                        onChange={(e) => setSupplier(e.target.value)}
-                                        placeholder="Enter supplier or company name..."
-                                        className="bg-[#1e293b] border-slate-700 text-white"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">Staff In Charge <span className="text-red-400">*</span></Label>
-                                    <Input
-                                        value={staffIncharge}
-                                        onChange={(e) => setStaffIncharge(e.target.value)}
-                                        placeholder="Person responsible for this record..."
-                                        className="bg-[#1e293b] border-slate-700 text-white"
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-slate-300">Notes <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                <Textarea
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Enter any additional notes or important information..."
-                                    className="bg-[#1e293b] border-slate-700 text-white min-h-[80px] resize-y"
-                                    rows={3}
-                                />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Documents Extra Nav Buttons */}
-                    <div className="flex justify-between mt-4">
-                        <Button type="button" variant="outline" onClick={() => setActiveTab('monitoring')} className="border-slate-700 text-slate-300 hover:bg-slate-800 px-8">
-                            &larr; Previous: Monitoring
-                        </Button>
-                        <Button type="button" onClick={() => setActiveTab('storage')} disabled={!canGoToStorage} className={`px-8 text-white ${!canGoToStorage ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
-                            Next: Storage &rarr;
-                        </Button>
-                    </div>
-                </div>
-
 
                 {/* TAB 4: Storage Location */}
                 <div className={activeTab !== 'storage' ? 'hidden' : ''}>
@@ -1028,9 +1450,9 @@ const AddProcurement: React.FC = () => {
                                     <Label className="text-slate-300">
                                         {storageMode === 'box' ? 'Folder in Box *' : 'Folder *'}
                                     </Label>
-                                    <Select value={folderId} onValueChange={setFolderId} disabled={storageMode === 'box' ? !boxId : !shelfId}>
+                                    <Select value={folderId} onValueChange={setFolderId} disabled={(storageMode === 'box' ? !boxId : !shelfId) || isFoldersLoading}>
                                         <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white flex-1">
-                                            <SelectValue placeholder="Select Folder" />
+                                            <SelectValue placeholder={isFoldersLoading ? "Loading folders..." : "Select Folder"} />
                                         </SelectTrigger>
                                         <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
                                             {availableFolders.map((f) => (
@@ -1039,7 +1461,13 @@ const AddProcurement: React.FC = () => {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                {(storageMode === 'box' ? boxId : shelfId) && availableFolders.length === 0 && (
+                                {isFoldersLoading && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                                        <span className="text-xs text-blue-400">Syncing folders...</span>
+                                    </div>
+                                )}
+                                {(storageMode === 'box' ? boxId : shelfId) && !isFoldersLoading && availableFolders.length === 0 && (
                                     <p className="text-xs text-amber-500">No folders found. Create one.</p>
                                 )}
 
@@ -1120,7 +1548,7 @@ const AddProcurement: React.FC = () => {
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isLoading || (storageMode === 'shelf' ? (!cabinetId || !shelfId || !folderId) : (!cabinetId || !shelfId || !boxId || !folderId))}
+                            disabled={isLoading || (storageMode === 'shelf' ? (!cabinetId || !shelfId || !folderId) : (!boxId || !folderId))}
                             className="bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 text-white px-10 py-4 text-base font-semibold shadow-xl"
                         >
                             {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Saving Record...</> : <><Save className="mr-2 h-5 w-5" />Save Procurement Record</>}
@@ -1135,18 +1563,8 @@ const AddProcurement: React.FC = () => {
 export default AddProcurement;
 
 
-// Extracted Components to prevent focus loss
-
-const MonitoringDateField = ({ label, date, setDate, isDisabled = false, activeColor = 'blue' }: any) => {
-    const inputRef = React.useRef<HTMLInputElement>(null);
-    const dateStr = date ? format(date, 'yyyy-MM-dd') : '';
-
-    React.useEffect(() => {
-        if (inputRef.current && inputRef.current.value !== dateStr) {
-            inputRef.current.value = dateStr;
-        }
-    }, [dateStr]);
-
+// Extracted Components to prevent focus loss\n
+const MonitoringDateField = ({ label, value, setValue, isDisabled = false, activeColor = 'blue' }: any) => {
     const activeClasses = {
         blue: { border: 'border-blue-500/30', bg: 'bg-blue-900/10', text: 'text-blue-400', checkBg: 'data-[state=checked]:bg-blue-600', checkBorder: 'data-[state=checked]:border-blue-600', ring: 'focus:ring-blue-500' },
         purple: { border: 'border-purple-500/30', bg: 'bg-purple-900/10', text: 'text-purple-400', checkBg: 'data-[state=checked]:bg-purple-600', checkBorder: 'data-[state=checked]:border-purple-600', ring: 'focus:ring-purple-500' },
@@ -1154,34 +1572,24 @@ const MonitoringDateField = ({ label, date, setDate, isDisabled = false, activeC
     }[activeColor] as any;
 
     return (
-        <div className={`space-y-2 p-3 rounded-lg border transition-all ${isDisabled ? 'border-slate-800 bg-slate-900/30 opacity-50' : date ? `${activeClasses.border} ${activeClasses.bg}` : 'border-slate-700 bg-slate-800/30'}`}>
+        <div className={`space-y-2 p-3 rounded-lg border transition-all ${isDisabled ? 'border-slate-800 bg-slate-900/30 opacity-50' : value ? `${activeClasses.border} ${activeClasses.bg}` : 'border-slate-700 bg-slate-800/30'}`}>
             <div className="flex items-center gap-2">
                 <Checkbox
-                    checked={!!date}
-                    onCheckedChange={(c) => setDate(c ? new Date() : undefined)}
+                    checked={!!value}
+                    onCheckedChange={(c) => setValue(c ? format(new Date(), 'MM/dd/yyyy') : '')}
                     disabled={isDisabled}
                     className={`h-4 w-4 border-slate-500 ${activeClasses.checkBg} ${activeClasses.checkBorder} disabled:opacity-50`}
                 />
-                <span className={`text-sm font-medium ${date ? activeClasses.text : isDisabled ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
+                <span className={`text-sm font-medium ${value ? activeClasses.text : isDisabled ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
             </div>
             <div className="pl-6">
                 <input
-                    ref={inputRef}
-                    type="date"
-                    max="9999-12-31"
-                    defaultValue={dateStr}
-                    onBlur={(e) => {
-                        const val = e.target.value;
-                        if (val !== dateStr) setDate(val ? new Date(val) : undefined);
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            const val = e.currentTarget.value;
-                            if (val !== dateStr) setDate(val ? new Date(val) : undefined);
-                        }
-                    }}
+                    type="text"
+                    value={value || ''}
+                    placeholder="Progress/Date..."
+                    onChange={(e) => setValue(e.target.value)}
                     disabled={isDisabled}
-                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${isDisabled ? 'cursor-not-allowed opacity-50' : ''} [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${isDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
                 />
             </div>
         </div>
@@ -1197,7 +1605,7 @@ const DatePickerField = ({ label, date, setDate }: { label: string, date: Date |
                     variant="outline"
                     className={`h-9 w-full justify-between text-left font-normal bg-[#1e293b] border-slate-700 text-white hover:bg-[#253045] ${!date && "text-muted-foreground"}`}
                 >
-                    <span>{date ? format(date, "PPP") : "Pick date"}</span>
+                    <span>{date ? format(date, 'MMM d, yyyy') : "Pick date"}</span>
                     <CalendarIcon className="ml-2 h-4 w-4 text-white opacity-100" />
                 </Button>
             </PopoverTrigger>
@@ -1213,7 +1621,3 @@ const DatePickerField = ({ label, date, setDate }: { label: string, date: Date |
         </Popover>
     </div>
 );
-
-
-
-

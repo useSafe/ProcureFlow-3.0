@@ -14,7 +14,7 @@ import {
 import { onProcurementsChange, onCabinetsChange, onShelvesChange, onFoldersChange, onBoxesChange } from '@/lib/storage';
 import { initializeDummyData } from '@/lib/initDummyData';
 import { Procurement, Cabinet, Shelf, Folder, Box } from '@/types/procurement';
-import { FileText, Archive, Layers, Package, FolderOpen, Clock, TrendingUp, Database, Download, Search, Plus, Eye, Map as MapIcon, Activity, Box as BoxIcon, Filter } from 'lucide-react';
+import { FileText, Archive, Layers, Package, FolderOpen, Clock, TrendingUp, Database, Download, Search, Plus, Eye, Map as MapIcon, Activity, Box as BoxIcon, Filter, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import {
     ChartContainer,
@@ -56,14 +56,31 @@ const Dashboard: React.FC = () => {
         };
     }, []);
 
+    // Helper: extract 4-digit year from any PR number format
+    const extractPrYear = (prNumber: string): string | null => {
+        // New format: YYYY-MMM-SEQ (e.g. 2025-JAN-001)
+        const newMatch = prNumber.match(/^(\d{4})-/);
+        if (newMatch) return newMatch[1];
+        // Old format: DIV-MMM-YY-SEQ (e.g. GSSO-JAN-25-001)
+        const oldMatch = prNumber.match(/^[A-Za-z]+-[A-Za-z]+-([0-9]{2,4})-/);
+        if (oldMatch) {
+            const yr = oldMatch[1];
+            if (yr.length === 2) {
+                // 2-digit year: assume 2000+
+                return (2000 + parseInt(yr)).toString();
+            }
+            return yr; // already 4 digits
+        }
+        return null;
+    };
+
     // Compute Available Years
     const availableYears = useMemo(() => {
         const years = new Set<string>();
         procurements.forEach(p => {
-            // Match YYYY- at start of PR number
-            const match = p.prNumber.match(/^(\d{4})-/);
-            if (match) {
-                years.add(match[1]);
+            const yr = extractPrYear(p.prNumber);
+            if (yr) {
+                years.add(yr);
             } else if (p.createdAt) {
                 try {
                     years.add(new Date(p.createdAt).getFullYear().toString());
@@ -79,8 +96,8 @@ const Dashboard: React.FC = () => {
     const filteredProcurements = useMemo(() => {
         if (selectedYear === 'all') return procurements;
         return procurements.filter(p => {
-            const match = p.prNumber.match(/^(\d{4})-/);
-            if (match) return match[1] === selectedYear;
+            const yr = extractPrYear(p.prNumber);
+            if (yr) return yr === selectedYear;
             if (p.createdAt) {
                 return new Date(p.createdAt).getFullYear().toString() === selectedYear;
             }
@@ -204,6 +221,13 @@ const Dashboard: React.FC = () => {
         { name: 'Cancelled', value: filteredProcurements.filter(p => p.procurementStatus === 'Cancelled').length, fill: '#ea580c' },
     ].filter(d => d.value > 0);
 
+    const urgencyData = [
+        { name: 'Low', value: filteredProcurements.filter(p => p.urgencyLevel === 'Low').length, fill: '#3b82f6' }, // Blue
+        { name: 'Medium', value: filteredProcurements.filter(p => p.urgencyLevel === 'Medium').length, fill: '#f59e0b' }, // Amber
+        { name: 'High', value: filteredProcurements.filter(p => p.urgencyLevel === 'High').length, fill: '#ef4444' }, // Red
+        { name: 'Critical', value: filteredProcurements.filter(p => p.urgencyLevel === 'Critical').length, fill: '#b91c1c' }, // Dark Red
+    ].filter(d => d.value > 0);
+
     // Filtered suggestions logic (uses base procurements for global search, or filtered?)
     // Search usually implies global search. I'll keep it global to find any record.
     const filteredSuggestions = useMemo(() => {
@@ -286,10 +310,10 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="space-y-6 h-full overflow-auto pb-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-                    <p className="text-slate-400 mt-1">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h1>
+                    <p className="text-slate-400 mt-1 text-sm">
                         Overview of your file tracking system {selectedYear !== 'all' && `(${selectedYear})`}
                     </p>
                 </div>
@@ -450,7 +474,7 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                     {/* File Status Distribution Chart */}
                     <Card className="border-none bg-[#0f172a] text-white shadow-lg">
                         <CardHeader>
@@ -522,11 +546,35 @@ const Dashboard: React.FC = () => {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Urgency Levels Chart */}
+                    <Card className="border-none bg-[#0f172a] text-white shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                                Urgency Levels
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[200px] relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={urgencyData} cx="50%" cy="48%" innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
+                                            {urgencyData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                                            <LabelList dataKey="value" position="inside" fill="#fff" stroke="none" fontSize={14} fontWeight="bold" />
+                                        </Pie>
+                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff', borderRadius: '8px', fontSize: '12px' }} itemStyle={{ color: '#fff' }} />
+                                        <Legend verticalAlign="bottom" height={24} iconSize={8} wrapperStyle={{ fontSize: '12px' }} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-5">
+                <div className="grid gap-6 grid-cols-1 md:grid-cols-5">
                     {/* Top Storages Chart (Mixed Drawers & Boxes) */}
-                    <Card className="md:col-span-2 sm:col-span-3 border-none bg-[#0f172a] text-white shadow-lg">
+                    <Card className="md:col-span-2 border-none bg-[#0f172a] text-white shadow-lg">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2 text-base">
                                 <Layers className="h-4 w-4 text-purple-400" />

@@ -51,7 +51,7 @@ import {
 } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { deleteProcurement, updateProcurement, onProcurementsChange, onCabinetsChange, onShelvesChange, onFoldersChange, onDivisionsChange, onBoxesChange } from '@/lib/storage';
+import { deleteProcurement, updateProcurement, addProcurement, onProcurementsChange, onCabinetsChange, onShelvesChange, onFoldersChange, onDivisionsChange, onBoxesChange, recalculateAllFolders } from '@/lib/storage';
 import { Procurement, Cabinet, Shelf, Folder, Box, ProcurementStatus, UrgencyLevel, ProcurementFilters, Division } from '@/types/procurement';
 import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { DateRange } from 'react-day-picker';
@@ -85,7 +85,11 @@ import {
     Calendar as CalendarIcon,
     Package,
     Loader2,
-    Info
+    Info,
+    Upload,
+    CheckCircle2,
+    XCircle,
+    AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { ProcurementProcessStatus, ProcurementType } from '@/types/core';
@@ -108,15 +112,6 @@ const MONTHS = [
 const checklistItems = CHECKLIST_ITEMS;
 
 const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = 'blue' }: { label: string; value: string | undefined; onChange: (date: string | undefined) => void; disabled: boolean; activeColor?: 'blue' | 'purple' | 'emerald' }) => {
-    const inputRef = React.useRef<HTMLInputElement>(null);
-    const dateStr = value ? format(new Date(value), 'yyyy-MM-dd') : '';
-
-    React.useEffect(() => {
-        if (inputRef.current && inputRef.current.value !== dateStr) {
-            inputRef.current.value = dateStr;
-        }
-    }, [dateStr]);
-
     const activeClasses = {
         blue: { border: 'border-blue-500/30', bg: 'bg-blue-900/10', text: 'text-blue-400', checkBg: 'data-[state=checked]:bg-blue-600', checkBorder: 'data-[state=checked]:border-blue-600', ring: 'focus:ring-blue-500' },
         purple: { border: 'border-purple-500/30', bg: 'bg-purple-900/10', text: 'text-purple-400', checkBg: 'data-[state=checked]:bg-purple-600', checkBorder: 'data-[state=checked]:border-purple-600', ring: 'focus:ring-purple-500' },
@@ -128,30 +123,20 @@ const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = '
             <div className="flex items-center gap-2">
                 <Checkbox
                     checked={!!value}
-                    onCheckedChange={(c) => onChange(c ? (value || new Date().toISOString()) : undefined)}
+                    onCheckedChange={(c) => onChange(c ? (value || format(new Date(), 'MM/dd/yyyy')) : undefined)}
                     disabled={disabled}
                     className={`h-4 w-4 border-slate-500 ${activeClasses.checkBg} ${activeClasses.checkBorder} disabled:opacity-50`}
                 />
                 <span className={`text-sm font-medium ${value ? activeClasses.text : disabled ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
             </div>
             <div className="pl-6">
-                <Input
-                    ref={inputRef}
-                    type="date"
-                    max="9999-12-31"
-                    defaultValue={dateStr}
-                    onBlur={(e) => {
-                        const val = e.target.value;
-                        if (val !== dateStr) onChange(val ? new Date(val).toISOString() : undefined);
-                    }}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                            const val = e.currentTarget.value;
-                            if (val !== dateStr) onChange(val ? new Date(val).toISOString() : undefined);
-                        }
-                    }}
+                <input
+                    type="text"
+                    value={value || ''}
+                    placeholder="Progress/Date..."
+                    onChange={(e) => onChange(e.target.value || undefined)}
                     disabled={disabled}
-                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${disabled ? 'cursor-not-allowed text-slate-500' : ''} [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
                 />
             </div>
         </div>
@@ -159,7 +144,7 @@ const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = '
 };
 
 interface ProcurementListProps {
-    forcedType?: string; // 'Small Value Procurement(SVP)' | 'Regular Bidding' | etc.
+    forcedType?: string;
     pageTitle?: string;
 }
 
@@ -210,6 +195,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         if (!procurement.rfqOpeningDate) return 'RFQ Opening';
         if (!procurement.bacResolutionDate) return 'BAC Resolution';
         if (!procurement.forwardedGsdDate) return 'Forwarded GSD for P.O.';
+        if (!procurement.poNtpForwardedGsdDate) return 'Add PO/NTP forwarded to GSD';
 
         return 'P.O. Created';
     };
@@ -265,6 +251,28 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
     // Export Modal State
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+    // Import State
+    const [isImporting, setIsImporting] = useState(false);
+    const [isImportResultOpen, setIsImportResultOpen] = useState(false);
+    const [importResults, setImportResults] = useState<{ imported: number; skipped: string[]; errors: string[] }>({ imported: 0, skipped: [], errors: [] });
+    const importFileRef = React.useRef<HTMLInputElement>(null);
+
+    // One-time automatic recalculation of stack numbers
+    useEffect(() => {
+        const runRecalc = async () => {
+            if (!localStorage.getItem('has_recalculated_stacks_v3')) {
+                try {
+                    await recalculateAllFolders();
+                    localStorage.setItem('has_recalculated_stacks_v3', 'true');
+                    toast.success('System: Successfully recalibrated all folder stack numbers.');
+                } catch (e) {
+                    console.error("Failed to batch recalculate", e);
+                }
+            }
+        };
+        runRecalc();
+    }, []);
     // Automatically determined export format based on forcedType
     const exportFormat = forcedType === 'SVP' ? 'svp' : forcedType === 'Regular Bidding' ? 'regular' : 'standard';
 
@@ -304,18 +312,51 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     const [editPrMonth, setEditPrMonth] = useState('');
     const [editPrYear, setEditPrYear] = useState('');
     const [editPrSequence, setEditPrSequence] = useState('');
+    const [editPrFormat, setEditPrFormat] = useState<'old' | 'new'>('old');
+    const [isCheckingEditPr, setIsCheckingEditPr] = useState(false);
+    const [editPrExists, setEditPrExists] = useState<boolean | null>(null);
 
     useEffect(() => {
         const unsub = onDivisionsChange(setDivisions);
         return () => unsub();
     }, []);
+
+    // Live validation for Edit PR Number
+    useEffect(() => {
+        if (!editingProcurement) {
+            setEditPrExists(null);
+            return;
+        }
+
+        const isPrComplete = editPrFormat === 'old'
+            ? !!(editDivisionId && editPrMonth && editPrYear && editPrSequence)
+            : !!(editPrMonth && editPrYear && editPrSequence);
+
+        if (!isPrComplete) {
+            setEditPrExists(null);
+            return;
+        }
+
+        const currentPrPreview = editPrFormat === 'old'
+            ? `${divisions.find(d => d.id === editDivisionId)?.abbreviation}-${editPrMonth}-${editPrYear.length === 4 ? editPrYear.slice(-2) : editPrYear}-${editPrSequence}`
+            : `${editPrYear}-${editPrMonth}-${editPrSequence}`;
+
+        setIsCheckingEditPr(true);
+        const timer = setTimeout(() => {
+            const exists = procurements.some(p => p.prNumber === currentPrPreview && p.id !== editingProcurement.id);
+            setEditPrExists(exists);
+            setIsCheckingEditPr(false);
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [editPrFormat, editDivisionId, editPrMonth, editPrYear, editPrSequence, divisions, procurements, editingProcurement]);
     const [viewProcurement, setViewProcurement] = useState<Procurement | null>(null);
     const [isNonProcurement, setIsNonProcurement] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     // Sorting state
     const [sortField, setSortField] = useState<'name' | 'prNumber' | 'date' | 'stackNumber'>('date');
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // Relocate Modal State
     const [isRelocateDialogOpen, setIsRelocateDialogOpen] = useState(false);
@@ -597,12 +638,16 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     }, [filters.cabinetId, shelves]);
 
     useEffect(() => {
-        if (filters.shelfId) {
-            setFilterAvailableFolders(folders.filter(f => f.shelfId === filters.shelfId));
+        if (filters.boxId && filters.boxId !== 'all') {
+            // Box filter selected: show folders belonging to that box
+            setFilterAvailableFolders(folders.filter(f => f.boxId === filters.boxId));
+        } else if (filters.shelfId) {
+            // Shelf (cabinet) filter selected: show direct folders (no box)
+            setFilterAvailableFolders(folders.filter(f => f.shelfId === filters.shelfId && !f.boxId));
         } else {
             setFilterAvailableFolders([]);
         }
-    }, [filters.shelfId, folders]);
+    }, [filters.shelfId, filters.boxId, folders]);
 
     // build status options based on current procurements (fall back to common ones)
     // Filter options
@@ -626,6 +671,22 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             return [...prev, type];
         });
     };
+
+    const toggleProcurementStatusFilter = (status: string) => {
+        setProcurementStatusFilters(prev => {
+            if (prev.includes(status)) return prev.filter(s => s !== status);
+            return [...prev, status];
+        });
+    };
+
+    const PROCESS_STATUS_OPTIONS = [
+        'Completed',
+        'In Progress',
+        'Failure',
+        'Returned PR to EU',
+        'Not yet Acted',
+        'Cancelled'
+    ] as const;
 
 
 
@@ -660,9 +721,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             })
         );
 
+        // Process Status filter (multi-select, empty = all)
+        const matchesProcurementStatus = procurementStatusFilters.length === 0 || procurementStatusFilters.includes(procurement.procurementStatus || 'Not yet Acted');
+
         const matchesBox = !filters.boxId || procurement.boxId === filters.boxId;
 
-        return matchesSearch && matchesCabinet && matchesShelf && matchesFolder && matchesStatus && matchesUrgency && matchesDivision && matchesType && matchesDate && matchesBox;
+        return matchesSearch && matchesCabinet && matchesShelf && matchesFolder && matchesStatus && matchesUrgency && matchesDivision && matchesType && matchesDate && matchesBox && matchesProcurementStatus;
     }).sort((a, b) => {
         let comparison = 0;
 
@@ -671,8 +735,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         } else if (sortField === 'prNumber') {
             comparison = a.prNumber.localeCompare(b.prNumber);
         } else if (sortField === 'date') {
-            // Reverse comparison for date: newer dates first when ascending
-            comparison = new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+            // Sort by exact system creation time for multi-user consistency
+            comparison = new Date(a.createdAt || a.dateAdded).getTime() - new Date(b.createdAt || b.dateAdded).getTime();
         } else if (sortField === 'stackNumber') {
             // Sort by stack number (files without stack numbers go to end)
             const aStack = a.stackNumber || 999;
@@ -714,13 +778,14 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         });
         // clear multi-select status
         setStatusFilters([]);
+        setProcurementStatusFilters([]);
 
         setFilterDivision('all_divisions');
         setTypeFilters([]);
         setFilterDateRange(undefined);
         // reset sorting
         setSortField('date');
-        setSortDirection('asc');
+        setSortDirection('desc');
         setCurrentPage(1);
     };
 
@@ -728,19 +793,27 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         setEditingProcurement(procurement);
         setIsEditDialogOpen(true);
 
-        // Parse PR Number for Edit Modal (Format: DIV-MMM-YY-SEQ)
+        // Parse PR Number for Edit Modal
         const parts = procurement.prNumber.split('-');
-        if (parts.length >= 4) {
+        // Detect format: Old = DIV-MMM-YY-SEQ (parts[0] is alpha abbrev), New = YYYY-MMM-SEQ
+        const isNewFormat = parts.length === 3 || /^\d{4}$/.test(parts[0]);
+        if (isNewFormat && parts.length >= 3) {
+            setEditPrFormat('new');
+            setEditPrYear(parts[0]);
+            setEditPrMonth(parts[1]);
+            setEditPrSequence(parts.slice(2).join('-'));
+            setEditDivisionId('');
+        } else if (!isNewFormat && parts.length >= 4) {
+            setEditPrFormat('old');
             const divAbbr = parts[0];
             const div = divisions.find(d => d.abbreviation === divAbbr);
             if (div) setEditDivisionId(div.id);
-            else setEditDivisionId(''); // Or handle unknown division
-
+            else setEditDivisionId('');
             setEditPrMonth(parts[1]);
             setEditPrYear(parts[2]);
             setEditPrSequence(parts[3]);
         } else {
-            // Reset if format doesn't match
+            setEditPrFormat('old');
             setEditDivisionId('');
             setEditPrMonth('');
             setEditPrYear('');
@@ -763,28 +836,56 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
         // Reconstruct PR Number from split fields
         let finalPrNumber = editingProcurement.prNumber;
-        if (editDivisionId && editPrMonth && editPrYear && editPrSequence) {
-            const div = divisions.find(d => d.id === editDivisionId);
-            if (div) {
-                finalPrNumber = `${div.abbreviation}-${editPrMonth}-${editPrYear}-${editPrSequence}`;
+        if (editPrFormat === 'new') {
+            if (editPrYear && editPrMonth && editPrSequence) {
+                finalPrNumber = `${editPrYear}-${editPrMonth}-${editPrSequence}`;
             }
+        } else {
+            if (editDivisionId && editPrMonth && editPrYear && editPrSequence) {
+                const div = divisions.find(d => d.id === editDivisionId);
+                if (div) {
+                    finalPrNumber = `${div.abbreviation}-${editPrMonth}-${editPrYear}-${editPrSequence}`;
+                }
+            }
+        }
+
+        // Check if the new PR number conflicts with an existing record (excluding self)
+        const duplicateExists = procurements.some(p => p.prNumber === finalPrNumber && p.id !== editingProcurement.id);
+        if (duplicateExists) {
+            toast.warning(`⚠️ PR Number "${finalPrNumber}" already exists on another record. Saving anyway...`);
         }
 
         const updatedProcurement: Procurement = {
             ...editingProcurement,
             prNumber: finalPrNumber,
-            // Ensure division name is updated if division ID changed (optional but good practice)
-            division: divisions.find(d => d.id === editDivisionId)?.name || editingProcurement.division,
+            // NOTE: division (End User) is already set on editingProcurement via the Edit modal's
+            // End User dropdown — do NOT overwrite it with editDivisionId (which is the PR Number's division).
             // Parse financials
             abc: editingProcurement.abc ? parseFloat(removeCommas(String(editingProcurement.abc))) : undefined,
             bidAmount: editingProcurement.bidAmount ? parseFloat(removeCommas(String(editingProcurement.bidAmount))) : undefined,
         };
 
+        // CRITICAL: Convert undefined monitoring fields to null so Firebase RTDB actually clears them.
+        // JSON.parse(JSON.stringify()) strips undefined values, leaving old DB values untouched.
+        // Setting to null explicitly tells Firebase to delete the field.
+        const monitoringFields: (keyof Procurement)[] = [
+            'receivedPrDate', 'prDeliberatedDate', 'publishedDate',
+            'rfqCanvassDate', 'rfqOpeningDate', 'bacResolutionDate',
+            'forwardedGsdDate', 'poNtpForwardedGsdDate',
+            'preBidDate', 'bidOpeningDate', 'bidEvaluationDate',
+            'postQualDate', 'postQualReportDate', 'forwardedOapiDate',
+            'noaDate', 'contractDate', 'ntpDate', 'awardedToDate',
+        ];
+        const savePayload: any = { ...updatedProcurement };
+        monitoringFields.forEach(field => {
+            if (savePayload[field] === undefined) savePayload[field] = null;
+        });
+
 
         try {
             await updateProcurement(
                 updatedProcurement.id,
-                updatedProcurement,
+                savePayload,
                 user?.email,
                 user?.name
             );
@@ -860,6 +961,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 user?.email,
                 user?.name
             );
+            await updateStackNumbersForFolder(folderId);
             toast.success('Stack number updated');
             setIsRelocateDialogOpen(false);
             setRelocateProcurement(null);
@@ -904,15 +1006,30 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
     // Helper to get Latest Activity Date
     const getLatestActionDate = (p: Procurement) => {
-        const dates = [
+        const dateStrings = [
             p.receivedPrDate, p.prDeliberatedDate, p.publishedDate, p.preBidDate, p.bidOpeningDate,
             p.bidEvaluationDate, p.bacResolutionDate, p.postQualDate, p.postQualReportDate,
             p.forwardedOapiDate, p.noaDate, p.contractDate, p.ntpDate, p.forwardedGsdDate,
-            p.rfqCanvassDate, p.rfqOpeningDate, p.dateAdded, p.createdAt
-        ].filter(d => d).map(d => new Date(d!));
+            p.poNtpForwardedGsdDate, p.rfqCanvassDate, p.rfqOpeningDate, p.dateAdded, p.createdAt
+        ];
 
-        if (dates.length === 0) return null;
-        return new Date(Math.max.apply(null, dates.map(d => d.getTime())));
+        let maxTime = -Infinity;
+        let hasValidDate = false;
+
+        for (const ds of dateStrings) {
+            if (!ds) continue;
+            const d = new Date(ds);
+            if (!isNaN(d.getTime())) {
+                const t = d.getTime();
+                if (t > maxTime) {
+                    maxTime = t;
+                    hasValidDate = true;
+                }
+            }
+        }
+
+        if (!hasValidDate) return null;
+        return new Date(maxTime);
     };
 
     // Updated to show: Shelf-Cabinet-Folder (Legacy) OR Box-Folder (New)
@@ -953,6 +1070,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             processStatus: 'all'
         });
         setIsExportModalOpen(true);
+    };
+
+    const safeFormatDate = (val?: string, fmt = 'MMM d, yyyy'): string => {
+        if (!val) return '';
+        try {
+            const d = new Date(val);
+            if (isNaN(d.getTime())) return val; // return raw string if not parseable
+            return format(d, fmt);
+        } catch { return val; }
     };
 
     const handleExportConfirm = () => {
@@ -1005,47 +1131,51 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'End User': p.division || '',
                     'ABC': p.abc ? `₱${p.abc.toLocaleString()}` : '',
                     'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
+                    'Storage Location': getLocationString(p),
+                    'Stack Number': p.stackNumber || '',
+                    'Process Status': p.procurementStatus || 'Pending',
                     'Borrowed by': p.borrowedBy || '',
                     'Borrower Division': p.borrowerDivision || '',
-                    'Borrowed Date': p.borrowedDate ? format(new Date(p.borrowedDate), 'MMM d, yyyy') : '',
+                    'Borrowed Date': safeFormatDate(p.borrowedDate),
                     'Return by': p.returnedBy || '',
-                    'Return Date': p.returnDate ? format(new Date(p.returnDate), 'MMM d, yyyy') : '',
-                    'Date of Current Status': p.dateStatusUpdated ? format(new Date(p.dateStatusUpdated), 'MMM d, yyyy') : '',
+                    'Return Date': safeFormatDate(p.returnDate),
+                    'Date of Current Status': safeFormatDate(p.dateStatusUpdated),
                     'Remarks': p.description || '',
-                    'Received PR to Action(Date)': p.receivedPrDate ? format(new Date(p.receivedPrDate), 'MMM d, yyyy') : '',
-                    'PR Deliberated(Date)': p.prDeliberatedDate ? format(new Date(p.prDeliberatedDate), 'MMM d, yyyy') : '',
-                    'Published(Date)': p.publishedDate ? format(new Date(p.publishedDate), 'MMM d, yyyy') : '',
-                    'RFQ to Canvass(Date)': p.rfqCanvassDate ? format(new Date(p.rfqCanvassDate), 'MMM d, yyyy') : '',
-                    'RFQ Opening(Date)': p.rfqOpeningDate ? format(new Date(p.rfqOpeningDate), 'MMM d, yyyy') : '',
-                    'BAC Resolution(Date)': p.bacResolutionDate ? format(new Date(p.bacResolutionDate), 'MMM d, yyyy') : '',
-                    'Forwarded to GSD for P.O(Date)': p.forwardedGsdDate ? format(new Date(p.forwardedGsdDate), 'MMM d, yyyy') : '',
+                    'Received PR to Action(Date)': safeFormatDate(p.receivedPrDate),
+                    'PR Deliberated(Date)': safeFormatDate(p.prDeliberatedDate),
+                    'Published(Date)': safeFormatDate(p.publishedDate),
+                    'RFQ to Canvass(Date)': safeFormatDate(p.rfqCanvassDate),
+                    'RFQ Opening(Date)': safeFormatDate(p.rfqOpeningDate),
+                    'BAC Resolution(Date)': safeFormatDate(p.bacResolutionDate),
+                    'Forwarded to GSD for P.O(Date)': safeFormatDate(p.forwardedGsdDate),
+                    'PO/NTP Forwarded to GSD(Date)': safeFormatDate(p.poNtpForwardedGsdDate),
                     'Staff in Charge': p.createdByName || '',
                     'Supplier': p.supplier || '',
                     'Bid Amount': p.bidAmount ? `₱${p.bidAmount.toLocaleString()}` : '',
                     'Notes': p.notes || '',
-                    'A.': checklist.noticeToProceed ? 'Yes' : '',
-                    'B.': checklist.contractOfAgreement ? 'Yes' : '',
-                    'C.': checklist.noticeOfAward ? 'Yes' : '',
-                    'D.': checklist.bacResolutionAward ? 'Yes' : '',
-                    'E.': checklist.postQualReport ? 'Yes' : '',
-                    'F.': checklist.noticePostQual ? 'Yes' : '',
-                    'G.': checklist.bacResolutionPostQual ? 'Yes' : '',
-                    'H.': checklist.abstractBidsEvaluated ? 'Yes' : '',
-                    'I.': checklist.twgBidEvalReport ? 'Yes' : '',
+                    'A.': checklist.purchaseRequest ? 'Yes' : '',
+                    'B.': checklist.certificateOfFunds ? 'Yes' : '',
+                    'C.': checklist.publicationInvitation ? 'Yes' : '',
+                    'D.': checklist.minutesPreBid ? 'Yes' : '',
+                    'E.': checklist.biddingDocuments ? 'Yes' : '',
+                    'F.': checklist.supplementalBidBulletin ? 'Yes' : '',
+                    'G.': checklist.inviteObservers ? 'Yes' : '',
+                    'H.': checklist.biddersTechFinancialProposals ? 'Yes' : '',
+                    'I.': checklist.abstractBidsOpening ? 'Yes' : '',
                     'J.': checklist.minutesBidOpening ? 'Yes' : '',
-                    'K.': checklist.resultEligibilityCheck ? 'Yes' : '',
-                    'L.': checklist.biddersTechFinancialProposals ? 'Yes' : '',
-                    'M.': checklist.minutesPreBid ? 'Yes' : '',
-                    'N.': checklist.biddingDocuments ? 'Yes' : '',
-                    'O.1.': checklist.inviteObservers ? 'Yes' : '',
+                    'K.': checklist.postingCertification ? 'Yes' : '',
+                    'L.': checklist.twgBidEvalReport ? 'Yes' : '',
+                    'M.': checklist.abstractBidsEvaluated ? 'Yes' : '',
+                    'N.': checklist.bacResolutionPostQual ? 'Yes' : '',
+                    'O.': checklist.noticePostQual ? 'Yes' : '',
                     'O.2.': checklist.officialReceipt ? 'Yes' : '',
-                    'O.3.': checklist.boardResolution ? 'Yes' : '',
                     'O.4.': checklist.philgepsAwardNotice ? 'Yes' : '',
-                    'P.1.': checklist.philgepsPosting ? 'Yes' : '',
-                    'P.2.': checklist.websitePosting ? 'Yes' : '',
-                    'P.3.': checklist.postingCertificate ? 'Yes' : '',
-                    'Q.': checklist.fundsAvailability ? 'Yes' : '',
-                    'Date Added': format(new Date(p.dateAdded), 'MMM d, yyyy'),
+                    'P.': checklist.endorsementWithBacRes ? 'Yes' : '',
+                    'Q.': checklist.endorsementForSignature ? 'Yes' : '',
+                    'R.': checklist.noticeOfAward ? 'Yes' : '',
+                    'S.': checklist.contractAgreement ? 'Yes' : '',
+                    'T.': checklist.noticeToProceed ? 'Yes' : '',
+                    'Date Added': safeFormatDate(p.dateAdded),
                 };
             }
             if (exportFormat === 'regular') {
@@ -1055,53 +1185,56 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'End User': p.division || '',
                     'ABC': p.abc ? `₱${p.abc.toLocaleString()}` : '',
                     'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
+                    'Storage Location': getLocationString(p),
+                    'Stack Number': p.stackNumber || '',
+                    'Process Status': p.procurementStatus || 'Pending',
                     'Borrowed by': p.borrowedBy || '',
                     'Borrower Division': p.borrowerDivision || '',
-                    'Borrowed Date': p.borrowedDate ? format(new Date(p.borrowedDate), 'MMM d, yyyy') : '',
+                    'Borrowed Date': safeFormatDate(p.borrowedDate),
                     'Return by': p.returnedBy || '',
-                    'Return Date': p.returnDate ? format(new Date(p.returnDate), 'MMM d, yyyy') : '',
-                    'Date of Current Status': p.dateStatusUpdated ? format(new Date(p.dateStatusUpdated), 'MMM d, yyyy') : '',
+                    'Return Date': safeFormatDate(p.returnDate),
+                    'Date of Current Status': safeFormatDate(p.dateStatusUpdated),
                     'Remarks': p.description || '',
-                    'Received PR to Action(Date)': p.receivedPrDate ? format(new Date(p.receivedPrDate), 'MMM d, yyyy') : '',
-                    'PR Deliberated(Date)': p.prDeliberatedDate ? format(new Date(p.prDeliberatedDate), 'MMM d, yyyy') : '',
-                    'Published(Date)': p.publishedDate ? format(new Date(p.publishedDate), 'MMM d, yyyy') : '',
-                    'Pre-Bid(Date)': p.preBidDate ? format(new Date(p.preBidDate), 'MMM d, yyyy') : '',
-                    'Bid Opening(Date)': p.bidOpeningDate ? format(new Date(p.bidOpeningDate), 'MMM d, yyyy') : '',
-                    'Bid Evaluation Report(Date)': p.bidEvaluationDate ? format(new Date(p.bidEvaluationDate), 'MMM d, yyyy') : '',
-                    'Post Qualification(Date)': p.postQualDate ? format(new Date(p.postQualDate), 'MMM d, yyyy') : '',
-                    'Post Qualification Report(Date)': p.postQualReportDate ? format(new Date(p.postQualReportDate), 'MMM d, yyyy') : '',
-                    'Forwarded to OAPIA(Date)': p.forwardedOapiDate ? format(new Date(p.forwardedOapiDate), 'MMM d, yyyy') : '',
-                    'Notice of Award(Date)': p.noaDate ? format(new Date(p.noaDate), 'MMM d, yyyy') : '',
-                    'Contract Date(Date)': p.contractDate ? format(new Date(p.contractDate), 'MMM d, yyyy') : '',
-                    'Notice to Proceed(Date)': p.ntpDate ? format(new Date(p.ntpDate), 'MMM d, yyyy') : '',
-                    'Awarded to Supplier(Date)': p.awardedToDate ? format(new Date(p.awardedToDate), 'MMM d, yyyy') : '',
+                    'Received PR to Action(Date)': safeFormatDate(p.receivedPrDate),
+                    'PR Deliberated(Date)': safeFormatDate(p.prDeliberatedDate),
+                    'Published(Date)': safeFormatDate(p.publishedDate),
+                    'Pre-Bid(Date)': safeFormatDate(p.preBidDate),
+                    'Bid Opening(Date)': safeFormatDate(p.bidOpeningDate),
+                    'Bid Evaluation Report(Date)': safeFormatDate(p.bidEvaluationDate),
+                    'Post Qualification(Date)': safeFormatDate(p.postQualDate),
+                    'Post Qualification Report(Date)': safeFormatDate(p.postQualReportDate),
+                    'Forwarded to OAPIA(Date)': safeFormatDate(p.forwardedOapiDate),
+                    'Notice of Award(Date)': safeFormatDate(p.noaDate),
+                    'Contract Date(Date)': safeFormatDate(p.contractDate),
+                    'Notice to Proceed(Date)': safeFormatDate(p.ntpDate),
+                    'Awarded to Supplier(Date)': safeFormatDate(p.awardedToDate),
                     'Staff in Charge': p.createdByName || '',
                     'Supplier': p.supplier || '',
                     'Bid Amount': p.bidAmount ? `₱${p.bidAmount.toLocaleString()}` : '',
                     'Notes': p.notes || '',
-                    'A.': checklist.noticeToProceed ? 'Yes' : '',
-                    'B.': checklist.contractOfAgreement ? 'Yes' : '',
-                    'C.': checklist.noticeOfAward ? 'Yes' : '',
-                    'D.': checklist.bacResolutionAward ? 'Yes' : '',
-                    'E.': checklist.postQualReport ? 'Yes' : '',
-                    'F.': checklist.noticePostQual ? 'Yes' : '',
-                    'G.': checklist.bacResolutionPostQual ? 'Yes' : '',
-                    'H.': checklist.abstractBidsEvaluated ? 'Yes' : '',
-                    'I.': checklist.twgBidEvalReport ? 'Yes' : '',
+                    'A.': checklist.purchaseRequest ? 'Yes' : '',
+                    'B.': checklist.certificateOfFunds ? 'Yes' : '',
+                    'C.': checklist.publicationInvitation ? 'Yes' : '',
+                    'D.': checklist.minutesPreBid ? 'Yes' : '',
+                    'E.': checklist.biddingDocuments ? 'Yes' : '',
+                    'F.': checklist.supplementalBidBulletin ? 'Yes' : '',
+                    'G.': checklist.inviteObservers ? 'Yes' : '',
+                    'H.': checklist.biddersTechFinancialProposals ? 'Yes' : '',
+                    'I.': checklist.abstractBidsOpening ? 'Yes' : '',
                     'J.': checklist.minutesBidOpening ? 'Yes' : '',
-                    'K.': checklist.resultEligibilityCheck ? 'Yes' : '',
-                    'L.': checklist.biddersTechFinancialProposals ? 'Yes' : '',
-                    'M.': checklist.minutesPreBid ? 'Yes' : '',
-                    'N.': checklist.biddingDocuments ? 'Yes' : '',
-                    'O.1.': checklist.inviteObservers ? 'Yes' : '',
+                    'K.': checklist.postingCertification ? 'Yes' : '',
+                    'L.': checklist.twgBidEvalReport ? 'Yes' : '',
+                    'M.': checklist.abstractBidsEvaluated ? 'Yes' : '',
+                    'N.': checklist.bacResolutionPostQual ? 'Yes' : '',
+                    'O.': checklist.noticePostQual ? 'Yes' : '',
                     'O.2.': checklist.officialReceipt ? 'Yes' : '',
-                    'O.3.': checklist.boardResolution ? 'Yes' : '',
                     'O.4.': checklist.philgepsAwardNotice ? 'Yes' : '',
-                    'P.1.': checklist.philgepsPosting ? 'Yes' : '',
-                    'P.2.': checklist.websitePosting ? 'Yes' : '',
-                    'P.3.': checklist.postingCertificate ? 'Yes' : '',
-                    'Q.': checklist.fundsAvailability ? 'Yes' : '',
-                    'Date Added': format(new Date(p.dateAdded), 'MMM d, yyyy'),
+                    'P.': checklist.endorsementWithBacRes ? 'Yes' : '',
+                    'Q.': checklist.endorsementForSignature ? 'Yes' : '',
+                    'R.': checklist.noticeOfAward ? 'Yes' : '',
+                    'S.': checklist.contractAgreement ? 'Yes' : '',
+                    'T.': checklist.noticeToProceed ? 'Yes' : '',
+                    'Date Added': safeFormatDate(p.dateAdded),
                 };
             }
 
@@ -1111,45 +1244,45 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 'Project Name': p.projectName || '',
                 'Description': p.description,
                 'Division': p.division || '',
-                'Location': getLocationString(p),
                 'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
-                'Progress Status': p.procurementStatus || 'Pending',
+                'Storage Location': getLocationString(p),
                 'Stack Number': p.stackNumber || '',
+                'Process Status': p.procurementStatus || 'Pending',
                 'Borrowed By': p.borrowedBy || '',
                 'Borrower Division': p.borrowerDivision || '',
-                'Borrowed Date': p.borrowedDate ? format(new Date(p.borrowedDate), 'MMM d, yyyy') : '',
+                'Borrowed Date': safeFormatDate(p.borrowedDate),
                 'Return By': p.returnedBy || '',
-                'Return Date': p.returnDate ? format(new Date(p.returnDate), 'MMM d, yyyy') : '',
-                'Procurement Date': p.procurementDate ? format(new Date(p.procurementDate), 'MMM d, yyyy') : '',
+                'Return Date': safeFormatDate(p.returnDate),
+                'Procurement Date': safeFormatDate(p.procurementDate),
                 'Tags': (p.tags || []).join(', '),
                 'Created By': p.createdByName || '',
-                'Created At': p.createdAt ? format(new Date(p.createdAt), 'MMM d, yyyy') : '',
+                'Created At': safeFormatDate(p.createdAt),
 
-                // Documents Handed Over (Checklist A-Q)
-                'A': checklist.noticeToProceed ? 'Yes' : '',
-                'B': checklist.contractOfAgreement ? 'Yes' : '',
-                'C': checklist.noticeOfAward ? 'Yes' : '',
-                'D': checklist.bacResolutionAward ? 'Yes' : '',
-                'E': checklist.postQualReport ? 'Yes' : '',
-                'F': checklist.noticePostQual ? 'Yes' : '',
-                'G': checklist.bacResolutionPostQual ? 'Yes' : '',
-                'H': checklist.abstractBidsEvaluated ? 'Yes' : '',
-                'I': checklist.twgBidEvalReport ? 'Yes' : '',
+                // Documents Handed Over (Checklist A-T)
+                'A': checklist.purchaseRequest ? 'Yes' : '',
+                'B': checklist.certificateOfFunds ? 'Yes' : '',
+                'C': checklist.publicationInvitation ? 'Yes' : '',
+                'D': checklist.minutesPreBid ? 'Yes' : '',
+                'E': checklist.biddingDocuments ? 'Yes' : '',
+                'F': checklist.supplementalBidBulletin ? 'Yes' : '',
+                'G': checklist.inviteObservers ? 'Yes' : '',
+                'H': checklist.biddersTechFinancialProposals ? 'Yes' : '',
+                'I': checklist.abstractBidsOpening ? 'Yes' : '',
                 'J': checklist.minutesBidOpening ? 'Yes' : '',
-                'K': checklist.resultEligibilityCheck ? 'Yes' : '',
-                'L': checklist.biddersTechFinancialProposals ? 'Yes' : '',
-                'M': checklist.minutesPreBid ? 'Yes' : '',
-                'N': checklist.biddingDocuments ? 'Yes' : '',
-                'O.1': checklist.inviteObservers ? 'Yes' : '',
+                'K': checklist.postingCertification ? 'Yes' : '',
+                'L': checklist.twgBidEvalReport ? 'Yes' : '',
+                'M': checklist.abstractBidsEvaluated ? 'Yes' : '',
+                'N': checklist.bacResolutionPostQual ? 'Yes' : '',
+                'O': checklist.noticePostQual ? 'Yes' : '',
                 'O.2': checklist.officialReceipt ? 'Yes' : '',
-                'O.3': checklist.boardResolution ? 'Yes' : '',
                 'O.4': checklist.philgepsAwardNotice ? 'Yes' : '',
-                'P.1': checklist.philgepsPosting ? 'Yes' : '',
-                'P.2': checklist.websitePosting ? 'Yes' : '',
-                'P.3': checklist.postingCertificate ? 'Yes' : '',
-                'Q': checklist.fundsAvailability ? 'Yes' : '',
+                'P': checklist.endorsementWithBacRes ? 'Yes' : '',
+                'Q': checklist.endorsementForSignature ? 'Yes' : '',
+                'R': checklist.noticeOfAward ? 'Yes' : '',
+                'S': checklist.contractAgreement ? 'Yes' : '',
+                'T': checklist.noticeToProceed ? 'Yes' : '',
 
-                'Date Added': format(new Date(p.dateAdded), 'MMM d, yyyy'),
+                'Date Added': safeFormatDate(p.dateAdded),
             };
         });
 
@@ -1166,6 +1299,243 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     };
 
 
+
+    const handleDownloadTemplate = (type: 'SVP' | 'Regular Bidding') => {
+        let templateData: any = {};
+        if (type === 'SVP') {
+            templateData = {
+                'Particulars/Project name': '', 'PR Number': '', 'End User': '', 'ABC': '', 'Status': '', 'Storage Location': '', 'Stack Number': '', 'Process Status': '', 'Borrowed by': '', 'Borrower Division': '', 'Borrowed Date': '', 'Return by': '', 'Return Date': '', 'Date of Current Status': '', 'Remarks': '', 'Received PR to Action(Date)': '', 'PR Deliberated(Date)': '', 'Published(Date)': '', 'RFQ to Canvass(Date)': '', 'RFQ Opening(Date)': '', 'BAC Resolution(Date)': '', 'Forwarded to GSD for P.O(Date)': '', 'PO/NTP Forwarded to GSD(Date)': '', 'Staff in Charge': '', 'Supplier': '', 'Bid Amount': '', 'A.': '', 'B.': '', 'C.': '', 'D.': '', 'E.': '', 'F.': '', 'G.': '', 'H.': '', 'I.': '', 'J.': '', 'K.': '', 'L.': '', 'M.': '', 'N.': '', 'O.': '', 'O.2.': '', 'O.4.': '', 'P.': '', 'Q.': '', 'R.': '', 'S.': '', 'T.': ''
+            };
+        } else {
+            templateData = {
+                'Particulars/Project name': '', 'PR Number': '', 'End User': '', 'ABC': '', 'Status': '', 'Storage Location': '', 'Stack Number': '', 'Process Status': '', 'Borrowed by': '', 'Borrower Division': '', 'Borrowed Date': '', 'Return by': '', 'Return Date': '', 'Date of Current Status': '', 'Remarks': '', 'Received PR to Action(Date)': '', 'PR Deliberated(Date)': '', 'Published(Date)': '', 'Pre-Bid(Date)': '', 'Bid Opening(Date)': '', 'Bid Evaluation Report(Date)': '', 'Post Qualification(Date)': '', 'Post Qualification Report(Date)': '', 'Forwarded to OAPIA(Date)': '', 'Notice of Award(Date)': '', 'Contract Date(Date)': '', 'Notice to Proceed(Date)': '', 'Awarded to Supplier(Date)': '', 'Staff in Charge': '', 'Supplier': '', 'Bid Amount': '', 'A.': '', 'B.': '', 'C.': '', 'D.': '', 'E.': '', 'F.': '', 'G.': '', 'H.': '', 'I.': '', 'J.': '', 'K.': '', 'L.': '', 'M.': '', 'N.': '', 'O.': '', 'O.2.': '', 'O.4.': '', 'P.': '', 'Q.': '', 'R.': '', 'S.': '', 'T.': ''
+            };
+        }
+
+        const ws = XLSX.utils.json_to_sheet([templateData]);
+        const csv = XLSX.utils.sheet_to_csv(ws);
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `import_template_${type.replace(' ', '_').toLowerCase()}.csv`;
+        link.click();
+        toast.success(`Downloaded ${type} Import Template!`);
+    };
+
+    // ── CSV Import ────────────────────────────────────────────────────
+    const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        // Reset input so the same file can be re-selected
+        e.target.value = '';
+
+        setIsImporting(true);
+        const results = { imported: 0, skipped: [] as string[], errors: [] as string[] };
+
+        try {
+            const buffer = await file.arrayBuffer();
+            const wb = XLSX.read(buffer, { type: 'array' });
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+
+            if (rows.length === 0) {
+                toast.error('The CSV file is empty or unreadable.');
+                setIsImporting(false);
+                return;
+            }
+
+            // Existing PR numbers used for duplicate check
+            const existingPRs = new Set(procurements.map(p => p.prNumber.trim()));
+
+            // Helper: parse ₱-prefixed money string → number
+            const parseMoney = (v: string): number => {
+                if (!v) return 0;
+                const clean = String(v).replace(/[₱,\s]/g, '');
+                const n = parseFloat(clean);
+                return isNaN(n) ? 0 : n;
+            };
+
+            // Helper: parse date string → ISO string or undefined
+            const parseDate = (v: any): string | undefined => {
+                if (!v || String(v).trim() === '') return undefined;
+                // Try native Date parsing
+                const d = new Date(String(v));
+                if (!isNaN(d.getTime())) return d.toISOString();
+                return undefined;
+            };
+
+            // Helper: 'Yes' → true, else false
+            const yesNo = (v: any): boolean => String(v).toLowerCase().trim() === 'yes';
+
+            for (const row of rows) {
+                // Detect which export format by checking for known column names
+                const isSVP = 'Particulars/Project name' in row && 'RFQ to Canvass(Date)' in row;
+                const isRegular = 'Particulars/Project name' in row && 'Bid Opening(Date)' in row;
+                const isGeneral = 'PR Number/IB Number' in row;
+
+                // PR Number
+                const prNumber = String(row['PR Number'] || row['PR Number/IB Number'] || '').trim();
+                if (!prNumber) { results.errors.push('Row missing PR Number — skipped'); continue; }
+
+                if (existingPRs.has(prNumber)) {
+                    results.skipped.push(prNumber);
+                    continue;
+                }
+
+                try {
+                    // Status mapping
+                    const rawStatus = String(row['Status'] || '').trim().toLowerCase();
+                    const status: 'active' | 'archived' =
+                        rawStatus === 'borrowed' || rawStatus === 'active' ? 'active' : 'archived';
+
+                    // Checklist mapping (SVP/Regular: 'A.' key; General: 'A' key)
+                    const ck = (key: string) => yesNo(row[key] || row[key + '.'] || '');
+
+                    // Procurement type
+                    let procurementType: 'SVP' | 'Regular Bidding' | undefined;
+                    if (isSVP) procurementType = 'SVP';
+                    else if (isRegular) procurementType = 'Regular Bidding';
+                    else procurementType = (row['Procurement Type'] as any) || 'SVP';
+
+                    // Storage Location parsing back to IDs
+                    let boxId: string | undefined;
+                    let cabinetId: string | undefined;
+                    let shelfId: string | undefined;
+                    let folderId: string | undefined;
+
+                    const storageLocStr = String(row['Storage Location'] || row['Location'] || '').trim();
+                    if (storageLocStr && storageLocStr !== '-') {
+                        const parts = storageLocStr.split('-');
+                        if (parts.length === 2) {
+                            const b = boxes.find(x => x.code === parts[0]);
+                            const f = folders.find(x => x.code === parts[1]);
+                            if (b) boxId = b.id;
+                            if (f) folderId = f.id;
+                        } else if (parts.length === 3) {
+                            const c = cabinets.find(x => x.code === parts[0]);
+                            const s = shelves.find(x => x.code === parts[1]);
+                            const f = folders.find(x => x.code === parts[2]);
+                            if (c) cabinetId = c.id;
+                            if (s) shelfId = s.id;
+                            if (f) folderId = f.id;
+                        } else if (parts.length === 1) {
+                            const b = boxes.find(x => x.code === parts[0]);
+                            if (b) boxId = b.id;
+                        }
+                    }
+
+                    const procurement: any = {
+                        prNumber,
+                        procurementType,
+                        status,
+                        // Names / descriptions
+                        projectName: row['Particulars/Project name'] || row['Project Name'] || '',
+                        description: row['Remarks'] || row['Description'] || '',
+                        division: row['End User'] || row['Division'] || '',
+                        notes: row['Notes'] || '',
+                        supplier: row['Supplier'] || '',
+
+                        // Money
+                        abc: parseMoney(row['ABC']) || undefined,
+                        bidAmount: parseMoney(row['Bid Amount']) || undefined,
+
+                        // Borrow fields
+                        borrowedBy: row['Borrowed by'] || row['Borrowed By'] || '',
+                        borrowerDivision: row['Borrower Division'] || '',
+                        borrowedDate: parseDate(row['Borrowed Date']),
+                        returnedBy: row['Return by'] || row['Return By'] || '',
+                        returnDate: parseDate(row['Return Date']),
+                        dateStatusUpdated: parseDate(row['Date of Current Status']),
+
+                        // Process Status
+                        procurementStatus: (row['Process Status'] || row['Progress Status'] || 'Not yet Acted') as any,
+
+                        // Location IDs
+                        boxId,
+                        cabinetId,
+                        shelfId,
+                        folderId,
+
+                        // Stack / tags
+                        stackNumber: row['Stack Number'] ? parseInt(row['Stack Number']) : undefined,
+                        tags: row['Tags'] ? row['Tags'].split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+
+                        // Monitoring — SVP dates
+                        receivedPrDate: parseDate(row['Received PR to Action(Date)']),
+                        prDeliberatedDate: parseDate(row['PR Deliberated(Date)']),
+                        publishedDate: parseDate(row['Published(Date)']),
+                        rfqCanvassDate: parseDate(row['RFQ to Canvass(Date)']),
+                        rfqOpeningDate: parseDate(row['RFQ Opening(Date)']),
+                        bacResolutionDate: parseDate(row['BAC Resolution(Date)']),
+                        forwardedGsdDate: parseDate(row['Forwarded to GSD for P.O(Date)']),
+                        poNtpForwardedGsdDate: parseDate(row['PO/NTP Forwarded to GSD(Date)']),
+
+                        // Monitoring — Regular Bidding dates
+                        preBidDate: parseDate(row['Pre-Bid(Date)']),
+                        bidOpeningDate: parseDate(row['Bid Opening(Date)']),
+                        bidEvaluationDate: parseDate(row['Bid Evaluation Report(Date)']),
+                        postQualDate: parseDate(row['Post Qualification(Date)']),
+                        postQualReportDate: parseDate(row['Post Qualification Report(Date)']),
+                        forwardedOapiDate: parseDate(row['Forwarded to OAPIA(Date)']),
+                        noaDate: parseDate(row['Notice of Award(Date)']),
+                        contractDate: parseDate(row['Contract Date(Date)']),
+                        ntpDate: parseDate(row['Notice to Proceed(Date)']),
+                        awardedToDate: parseDate(row['Awarded to Supplier(Date)']),
+
+                        // General export dates
+                        procurementDate: parseDate(row['Procurement Date']),
+                        dateAdded: parseDate(row['Date Added']) || new Date().toISOString(),
+
+                        // Checklist (try both 'A.' and 'A' formats)
+                        checklist: {
+                            purchaseRequest: ck('A'),
+                            certificateOfFunds: ck('B'),
+                            publicationInvitation: ck('C'),
+                            minutesPreBid: ck('D'),
+                            biddingDocuments: ck('E'),
+                            supplementalBidBulletin: ck('F'),
+                            inviteObservers: ck('G'),
+                            biddersTechFinancialProposals: ck('H'),
+                            abstractBidsOpening: ck('I'),
+                            minutesBidOpening: ck('J'),
+                            postingCertification: ck('K'),
+                            twgBidEvalReport: ck('L'),
+                            abstractBidsEvaluated: ck('M'),
+                            bacResolutionPostQual: ck('N'),
+                            noticePostQual: ck('O'),
+                            officialReceipt: ck('O.2') || ck('O.2.') || false,
+                            philgepsAwardNotice: ck('O.4') || ck('O.4.') || false,
+                            endorsementWithBacRes: ck('P'),
+                            endorsementForSignature: ck('Q'),
+                            noticeOfAward: ck('R'),
+                            contractAgreement: ck('S'),
+                            noticeToProceed: ck('T'),
+                        },
+                    };
+
+                    // Strip undefined values to keep Firebase clean
+                    Object.keys(procurement).forEach(k => procurement[k] === undefined && delete procurement[k]);
+
+                    await addProcurement(
+                        procurement,
+                        user?.email || 'import',
+                        user?.name || 'Import'
+                    );
+                    existingPRs.add(prNumber); // Prevent same-run duplicates
+                    results.imported++;
+                } catch (rowErr) {
+                    results.errors.push(`${prNumber}: ${(rowErr as Error).message}`);
+                }
+            }
+        } catch (err) {
+            toast.error('Failed to read CSV file.');
+            console.error(err);
+        }
+
+        setIsImporting(false);
+        setImportResults(results);
+        setIsImportResultOpen(true);
+    };
 
     const handleExportPDFSummary = () => {
         const doc = new jsPDF();
@@ -1327,6 +1697,48 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                             <FileText className="mr-2 h-4 w-4" />
                             Export as CSV
                         </Button>
+                    )}
+                    {/* Import CSV (admin / bac-staff only) */}
+                    {!['viewer', 'archiver'].includes(user?.role || '') && (
+                        <>
+                            <input
+                                ref={importFileRef}
+                                type="file"
+                                accept=".csv,.xlsx,.xls"
+                                className="hidden"
+                                onChange={handleImportCSV}
+                            />
+                            <Button
+                                onClick={() => importFileRef.current?.click()}
+                                disabled={isImporting}
+                                className="bg-violet-600 hover:bg-violet-700"
+                            >
+                                {isImporting ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Upload className="mr-2 h-4 w-4" />
+                                )}
+                                {isImporting ? 'Importing…' : 'Import CSV'}
+                            </Button>
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Template
+                                        <ChevronDown className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('SVP')} className="hover:bg-slate-800 cursor-pointer">
+                                        <Download className="mr-2 h-4 w-4" /> SVP Template
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('Regular Bidding')} className="hover:bg-slate-800 cursor-pointer">
+                                        <Download className="mr-2 h-4 w-4" /> Regular Bidding Template
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </>
                     )}
                 </div>
             </div>
@@ -1493,6 +1905,47 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
 
 
+                            {/* Process Status Filter (Multi-select) */}
+                            <div className="flex-1 min-w-[140px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="w-full flex justify-between items-center text-white px-3 py-1 h-6 text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <span>Process Status</span>
+                                                {procurementStatusFilters.length > 0 && (
+                                                    <span className="inline-flex items-center justify-center h-5 px-1.5 rounded-full bg-blue-600 text-white text-[10px] font-medium">
+                                                        {procurementStatusFilters.length}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <ChevronDown className="h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="bg-[#1e293b] border-slate-700 text-white p-3 w-56">
+                                        <div className="mb-2 text-slate-300 text-sm">Select process status</div>
+                                        <div className="flex flex-col gap-2">
+                                            {PROCESS_STATUS_OPTIONS.map((status) => (
+                                                <div key={status} className="flex items-center gap-2">
+                                                    <Checkbox
+                                                        checked={procurementStatusFilters.includes(status)}
+                                                        onCheckedChange={() => toggleProcurementStatusFilter(status)}
+                                                        className="border-slate-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleProcurementStatusFilter(status)}
+                                                        className="text-sm text-slate-200 text-left w-full"
+                                                    >
+                                                        {status}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+
+
                             {/* Division Filter */}
                             <div className="flex-1 min-w-[150px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
                                 <Select
@@ -1610,6 +2063,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     {!forcedType && <TableHead className="text-slate-300 w-[100px]">Type</TableHead>}
                                     <TableHead className="text-slate-300 w-[100px]">Location</TableHead>
                                     <TableHead className="text-center text-slate-300 w-[70px]">Stack #</TableHead>
+                                    {/* <TableHead className="text-slate-300 w-[100px]">Urgency / Deadline</TableHead> */}
                                     <TableHead className="text-slate-300 w-[120px]">Current Progress</TableHead>
                                     <TableHead className="text-slate-300 w-[110px]">Status</TableHead>
                                     <TableHead className="text-slate-300 w-[120px]">Date Progress Updated</TableHead>
@@ -1661,33 +2115,6 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                         // Determine Effective Status for Coloring
                                         // User logic: "Completed(Green), In Progress(Yellow), Returned PR to EU(Purple), Not yet Acted(Gray), Failure(Red), Cancelled(Red Orange)"
                                         let effectiveStatus = pStatus || 'Not yet Acted';
-
-                                        // Auto-detect 'In Progress' if marked 'Not yet Acted' but has updates
-                                        if (effectiveStatus === 'Not yet Acted') {
-                                            // Check if any progress monitoring dates are set
-                                            const hasProgress = [
-                                                procurement.receivedPrDate,
-                                                procurement.prDeliberatedDate,
-                                                procurement.publishedDate,
-                                                procurement.preBidDate,
-                                                procurement.bidOpeningDate,
-                                                procurement.bidEvaluationDate,
-                                                procurement.bacResolutionDate,
-                                                procurement.postQualDate,
-                                                procurement.postQualReportDate,
-                                                procurement.forwardedOapiDate,
-                                                procurement.noaDate,
-                                                procurement.contractDate,
-                                                procurement.ntpDate,
-                                                procurement.rfqCanvassDate,
-                                                procurement.rfqOpeningDate,
-                                                procurement.forwardedGsdDate
-                                            ].some(d => !!d);
-
-                                            if (hasProgress) {
-                                                effectiveStatus = 'In Progress';
-                                            }
-                                        }
 
                                         // If status is Pending (legacy), treat as In Progress
                                         if (pStatus === 'Pending') effectiveStatus = 'In Progress';
@@ -1794,6 +2221,23 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         {procurement.stackNumber ? `${procurement.stackNumber}` : '-'}
                                                     </span>
                                                 </TableCell>
+                                                {/* <TableCell>
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className={`inline-flex w-max items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${procurement.urgencyLevel === 'Critical' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                                                procurement.urgencyLevel === 'High' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                                                    procurement.urgencyLevel === 'Low' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' :
+                                                                        'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                            }`}>
+                                                            {procurement.urgencyLevel || 'Medium'}
+                                                        </span>
+                                                        {procurement.deadline && (
+                                                            <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                                                <CalendarIcon className="w-3 h-3 inline mr-1" />
+                                                                {format(new Date(procurement.deadline), 'MMM d, yyyy')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </TableCell> */}
                                                 <TableCell className="text-xs font-medium">
                                                     {/* "Current Progress" shows the NEXT stage/step */}
                                                     <span className={`${textStatusClass}`} title={`Status: ${effectiveStatus}`}>
@@ -1828,17 +2272,18 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        {/* {isFolderView && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleRelocateClick(procurement)}
-                                                            className="h-8 w-8 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
-                                                            title="Relocate / Reorder"
-                                                        >
-                                                            <ArrowUp className="h-4 w-4" />
-                                                        </Button>
-                                                    )} */}
+                                                        {/* Reorder Stack Number button */}
+                                                        {procurement.folderId && !['viewer', 'archiver'].includes(user?.role || '') && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => handleRelocateClick(procurement)}
+                                                                className="h-8 w-8 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                                                                title="Reorder Stack Number"
+                                                            >
+                                                                <ArrowUp className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
@@ -2024,21 +2469,41 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <div className="space-y-2 col-span-2">
                                         {!['Attendance Sheets', 'Others'].includes(editingProcurement.procurementType || '') && (
                                             <>
-                                                <Label className="text-slate-300">PR Number Construction</Label>
-                                                <div className="grid grid-cols-4 gap-2 items-end p-3 rounded-lg bg-[#1e293b]/50 border border-slate-700/50">
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-slate-400">Division</Label>
-                                                        <Select value={editDivisionId} onValueChange={setEditDivisionId}>
-                                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs">
-                                                                <SelectValue placeholder="Div" />
-                                                            </SelectTrigger>
-                                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
-                                                                {divisions.map(div => (
-                                                                    <SelectItem key={div.id} value={div.id}>{div.abbreviation}</SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <Label className="text-slate-300">PR Number Construction</Label>
+                                                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700 text-xs">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditPrFormat('old')}
+                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'old' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                        >
+                                                            Old (Div-Mon-Yr-#)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setEditPrFormat('new')}
+                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'new' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                        >
+                                                            New (Yr-Mon-#)
+                                                        </button>
                                                     </div>
+                                                </div>
+                                                <div className={`grid gap-2 items-end p-3 rounded-lg bg-[#1e293b]/50 border border-slate-700/50 ${editPrFormat === 'old' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                                                    {editPrFormat === 'old' && (
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-slate-400">Division</Label>
+                                                            <Select value={editDivisionId} onValueChange={setEditDivisionId}>
+                                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs">
+                                                                    <SelectValue placeholder="Div" />
+                                                                </SelectTrigger>
+                                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                                                    {divisions.map(div => (
+                                                                        <SelectItem key={div.id} value={div.id}>{div.abbreviation}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    )}
                                                     <div className="space-y-1">
                                                         <Label className="text-xs text-slate-400">Month</Label>
                                                         <Select value={editPrMonth} onValueChange={setEditPrMonth}>
@@ -2058,7 +2523,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                             value={editPrYear}
                                                             onChange={(e) => setEditPrYear(e.target.value)}
                                                             className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs"
-                                                            maxLength={2}
+                                                            maxLength={4}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
@@ -2067,12 +2532,34 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                             value={editPrSequence}
                                                             onChange={(e) => setEditPrSequence(e.target.value)}
                                                             className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs"
-                                                            maxLength={3}
+                                                            maxLength={7}
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="mt-1 text-xs text-slate-500 text-right">
-                                                    Current: <span className="font-mono text-emerald-500">{editingProcurement.prNumber}</span>
+                                                <div className="mt-1 text-xs text-slate-500 flex flex-col gap-1">
+                                                    <div className="flex justify-between items-center">
+                                                        <span>Preview: <span className="font-mono text-emerald-400 font-bold ml-1">
+                                                            {editPrFormat === 'old'
+                                                                ? (editDivisionId && divisions.find(d => d.id === editDivisionId)
+                                                                    ? `${divisions.find(d => d.id === editDivisionId)?.abbreviation}-${editPrMonth}-${editPrYear.length === 4 ? editPrYear.slice(-2) : editPrYear}-${editPrSequence}`
+                                                                    : 'XXX-XXX-XX-XXX')
+                                                                : (editPrYear && editPrMonth && editPrSequence ? `${editPrYear}-${editPrMonth}-${editPrSequence}` : 'XXXX-XXX-XXXX')
+                                                            }
+                                                        </span></span>
+                                                        <span>Current: <span className="font-mono text-emerald-500">{editingProcurement.prNumber}</span></span>
+                                                    </div>
+                                                    <div className="flex justify-start">
+                                                        {isCheckingEditPr ? (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+                                                                <span className="text-[10px] text-slate-400 italic">Validating ID...</span>
+                                                            </div>
+                                                        ) : (editPrExists !== null && (
+                                                            editPrExists
+                                                                ? <span className="text-[10px] text-red-500 font-bold bg-red-500/10 px-1.5 py-0.5 rounded animate-pulse">PR Existed</span>
+                                                                : <span className="text-[10px] text-emerald-500 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">PR still not on Records</span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </>
                                         )}
@@ -2234,21 +2721,93 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                             {/* Monitoring Process (Standard Grid) */}
                             <div className="bg-[#0f172a] p-4 rounded-lg border border-slate-800 border-l-4 border-l-blue-500 space-y-4  mt-4 mb-4 shadow-sm min-h-[100px]">
-                                <div className="border-b border-slate-800 pb-2">
-                                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                                        <CalendarIcon className="h-4 w-4 text-blue-500" />
-                                        Monitoring Process
-                                    </h3>
-                                    <p className="text-xs text-slate-400">Update key dates. Use checkboxes to enable/disable steps.</p>
+                                <div className="border-b border-slate-800 pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                                            <CalendarIcon className="h-4 w-4 text-blue-500" />
+                                            Monitoring Process
+                                        </h3>
+                                        <p className="text-xs text-slate-400">Update key dates. Use checkboxes to enable/disable steps.</p>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                            onClick={() => {
+                                                const today = format(new Date(), 'MM/dd/yyyy');
+                                                const isRegular = editingProcurement?.procurementType === 'Regular Bidding';
+                                                setEditingProcurement(prev => ({
+                                                    ...prev!,
+                                                    receivedPrDate: today,
+                                                    prDeliberatedDate: today,
+                                                    publishedDate: today,
+                                                    ...(isRegular ? {
+                                                        preBidDate: today,
+                                                        bidOpeningDate: today,
+                                                        bidEvaluationDate: today,
+                                                        bacResolutionDate: today,
+                                                        postQualDate: today,
+                                                        postQualReportDate: today,
+                                                        forwardedOapiDate: today,
+                                                        noaDate: today,
+                                                        contractDate: today,
+                                                        ntpDate: today,
+                                                        awardedToDate: today,
+                                                    } : {
+                                                        rfqCanvassDate: today,
+                                                        rfqOpeningDate: today,
+                                                        bacResolutionDate: today,
+                                                        forwardedGsdDate: today,
+                                                        poNtpForwardedGsdDate: today,
+                                                    })
+                                                }));
+                                            }}
+                                        >
+                                            Check All
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                            onClick={() => {
+                                                setEditingProcurement(prev => ({
+                                                    ...prev!,
+                                                    receivedPrDate: undefined,
+                                                    prDeliberatedDate: undefined,
+                                                    publishedDate: undefined,
+                                                    preBidDate: undefined,
+                                                    bidOpeningDate: undefined,
+                                                    bidEvaluationDate: undefined,
+                                                    bacResolutionDate: undefined,
+                                                    postQualDate: undefined,
+                                                    postQualReportDate: undefined,
+                                                    forwardedOapiDate: undefined,
+                                                    noaDate: undefined,
+                                                    contractDate: undefined,
+                                                    ntpDate: undefined,
+                                                    awardedToDate: undefined,
+                                                    rfqCanvassDate: undefined,
+                                                    rfqOpeningDate: undefined,
+                                                    forwardedGsdDate: undefined,
+                                                    poNtpForwardedGsdDate: undefined,
+                                                }));
+                                            }}
+                                        >
+                                            Uncheck All
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-4">
                                     {/* Pre-Procurement */}
                                     <div className="space-y-2">
                                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                            <MonitoringDateField label="Received PR to Action" value={editingProcurement.receivedPrDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, receivedPrDate: d, ...(!d ? { prDeliberatedDate: undefined, publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined } : {}) })} disabled={false} activeColor="blue" />
-                                            <MonitoringDateField label="PR Deliberated" value={editingProcurement.prDeliberatedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, prDeliberatedDate: d, ...(!d ? { publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.receivedPrDate} activeColor="blue" />
-                                            <MonitoringDateField label="Published" value={editingProcurement.publishedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, publishedDate: d, ...(!d ? { preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.prDeliberatedDate} activeColor="blue" />
+                                            <MonitoringDateField label="Received PR to Action" value={editingProcurement.receivedPrDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, receivedPrDate: d, ...(!d ? { prDeliberatedDate: undefined, publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={false} activeColor="blue" />
+                                            <MonitoringDateField label="PR Deliberated" value={editingProcurement.prDeliberatedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, prDeliberatedDate: d, ...(!d ? { publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.receivedPrDate} activeColor="blue" />
+                                            <MonitoringDateField label="Published" value={editingProcurement.publishedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, publishedDate: d, ...(!d ? { preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.prDeliberatedDate} activeColor="blue" />
                                         </div>
                                     </div>
 
@@ -2263,10 +2822,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 </>
                                             ) : (
                                                 <>
-                                                    <MonitoringDateField label="RFQ to Canvass" value={editingProcurement.rfqCanvassDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, rfqCanvassDate: d, ...(!d ? { rfqOpeningDate: undefined, bacResolutionDate: undefined, forwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.publishedDate} activeColor="purple" />
-                                                    <MonitoringDateField label="RFQ Opening" value={editingProcurement.rfqOpeningDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, rfqOpeningDate: d, ...(!d ? { bacResolutionDate: undefined, forwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.rfqCanvassDate} activeColor="purple" />
-                                                    <MonitoringDateField label="BAC Resolution" value={editingProcurement.bacResolutionDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, bacResolutionDate: d, ...(!d ? { forwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.rfqOpeningDate} activeColor="purple" />
-                                                    <MonitoringDateField label="Forwarded to GSD for P.O" value={editingProcurement.forwardedGsdDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, forwardedGsdDate: d })} disabled={!editingProcurement.bacResolutionDate} activeColor="purple" />
+                                                    <MonitoringDateField label="RFQ to Canvass" value={editingProcurement.rfqCanvassDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, rfqCanvassDate: d, ...(!d ? { rfqOpeningDate: undefined, bacResolutionDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.publishedDate} activeColor="purple" />
+                                                    <MonitoringDateField label="RFQ Opening" value={editingProcurement.rfqOpeningDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, rfqOpeningDate: d, ...(!d ? { bacResolutionDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.rfqCanvassDate} activeColor="purple" />
+                                                    <MonitoringDateField label="BAC Resolution" value={editingProcurement.bacResolutionDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, bacResolutionDate: d, ...(!d ? { forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.rfqOpeningDate} activeColor="purple" />
+                                                    <MonitoringDateField label="Forwarded to GSD for P.O" value={editingProcurement.forwardedGsdDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, forwardedGsdDate: d, ...(!d ? { poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.bacResolutionDate} activeColor="purple" />
+                                                    <MonitoringDateField label="PO/NTP Forwarded to GSD" value={editingProcurement.poNtpForwardedGsdDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, poNtpForwardedGsdDate: d })} disabled={!editingProcurement.forwardedGsdDate} activeColor="purple" />
                                                 </>
                                             )}
                                         </div>
@@ -2326,25 +2886,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     </div>
                                                 </>
                                             ) : (
-                                                /* To GSD (For SVP / Others) */
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center justify-between">
-                                                        <Label className={`text-xs ${!editingProcurement.forwardedGsdDate ? 'text-slate-600' : 'text-slate-300'}`}>To GSD</Label>
-                                                        <Checkbox
-                                                            checked={!!editingProcurement.forwardedGsdDate}
-                                                            onCheckedChange={(checked) => setEditingProcurement({ ...editingProcurement, forwardedGsdDate: checked ? (editingProcurement.forwardedGsdDate || new Date().toISOString()) : undefined })}
-                                                            disabled={!editingProcurement.bacResolutionDate}
-                                                            className="h-3.5 w-3.5 border-slate-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 disabled:opacity-50"
-                                                        />
-                                                    </div>
-                                                    <Input
-                                                        type="date"
-                                                        value={editingProcurement.forwardedGsdDate ? format(new Date(editingProcurement.forwardedGsdDate), 'yyyy-MM-dd') : ''}
-                                                        onChange={(e) => setEditingProcurement({ ...editingProcurement, forwardedGsdDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                                                        disabled={!editingProcurement.bacResolutionDate}
-                                                        className={`bg-[#1e293b] border-slate-700 text-white h-8 text-xs ${!editingProcurement.bacResolutionDate ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                    />
-                                                </div>
+                                                /* SVP: no extra block needed here — handled in canvass section above */
+                                                null
                                             )}
                                         </div>
                                     </div>
@@ -3054,7 +3597,83 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Import Result Modal */}
+            <Dialog open={isImportResultOpen} onOpenChange={setIsImportResultOpen}>
+                <DialogContent className="bg-[#1e293b] border-slate-800 text-white max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl">
+                            <Upload className="h-5 w-5 text-violet-400" />
+                            Import Complete
+                        </DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                            Summary of CSV import results.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        {/* Counters */}
+                        <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                                <p className="text-2xl font-bold text-emerald-400">{importResults.imported}</p>
+                                <p className="text-xs text-slate-400 mt-1">Imported</p>
+                            </div>
+                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                                <p className="text-2xl font-bold text-amber-400">{importResults.skipped.length}</p>
+                                <p className="text-xs text-slate-400 mt-1">Skipped (Duplicates)</p>
+                            </div>
+                            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                                <p className="text-2xl font-bold text-red-400">{importResults.errors.length}</p>
+                                <p className="text-xs text-slate-400 mt-1">Errors</p>
+                            </div>
+                        </div>
+
+                        {/* Skipped PRs */}
+                        {importResults.skipped.length > 0 && (
+                            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                                <p className="text-xs font-semibold text-amber-400 mb-2 flex items-center gap-1">
+                                    <AlertCircle className="h-3.5 w-3.5" /> Skipped — already exist in database
+                                </p>
+                                <div className="max-h-28 overflow-y-auto space-y-1">
+                                    {importResults.skipped.map((pr, i) => (
+                                        <p key={i} className="text-xs text-slate-300 font-mono">{pr}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Errors */}
+                        {importResults.errors.length > 0 && (
+                            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                                <p className="text-xs font-semibold text-red-400 mb-2 flex items-center gap-1">
+                                    <XCircle className="h-3.5 w-3.5" /> Row Errors
+                                </p>
+                                <div className="max-h-28 overflow-y-auto space-y-1">
+                                    {importResults.errors.map((err, i) => (
+                                        <p key={i} className="text-xs text-red-300 font-mono">{err}</p>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* All OK message */}
+                        {importResults.errors.length === 0 && importResults.skipped.length === 0 && importResults.imported > 0 && (
+                            <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                                <CheckCircle2 className="h-4 w-4" />
+                                All records imported successfully!
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <Button onClick={() => setIsImportResultOpen(false)} className="bg-violet-600 hover:bg-violet-700">
+                            Done
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
+
     );
 };
 
