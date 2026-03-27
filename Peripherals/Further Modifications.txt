@@ -1,3 +1,247 @@
+‎make a visual presentation BAC procurement process flow chart, modern, interactive and professional dark glowy ui/ux design use this html file as reference for the features to include. separate the path for shopping, svp, and regular bidding. also rearrange, reorder,  rewrite these each process on what exactly the right only include the nodes where that processes involved of BAC Secretariat or BAC Staff. use the proper shapes on building this procurement process flow chart, make sure no connection lines are intersected or overlaps, and make sure that the whole chart only capture on whole exact or normal zoomed screen, and should be Left to Right Portrait Layout and exportable as tarpapel(pdf) or image. btw these are the common process ive  experience as IT intern in BAC Office and what usual task on each processes. include error nodes like what to do if that error occur does it proceeds to other nodes not included on main process or should it go back to previous nodes on its main processes, on each modal boxes state the what is that stage, what happens or task done during that process, what do if problem occurs, Who are involved, Documents obtain on this processes, situational example(analogy), legal basis. also add a modal which it summarize the information about or necessary things to know about IRR, RA 9184, RA 12009. also relying to RA 9184, RA 12009, and IRR. implement it html, tailwind
+‎
+‎
+‎
+‎
+‎
+‎PR Logging:
+‎
+‎- GSD Gmail Account
+‎- PR Google sheet(Data Entry and Generate PR)
+‎- Write Generated PR No.
+‎- Stamp Received on Back of PRs and Write Time Now
+‎- Sign to BAC Secretariat
+‎- Log for PR Out: only if End User cant wait
+‎   - Stamp Date Now
+‎   - "Returned PR# YYYY-MMM-PRN to End User(For Signature-if PR still no Signed)"
+‎   - Project Title
+‎- Return and Receive for End User and left it so they will process it for PR to Action
+‎
+‎Budget(Optional if End User ask for this, but usually they're the one who should submit it):
+‎  - Receive for Budget Division for Processing Budget Allocation for that PR
+‎
+‎PR for Action:
+‎  - Open Procurement Monitoring Google sheet
+‎  - Input PR Data and set as PR for Action:
+‎          - PR Number, Title, End User, ABC, Status into "Not yet Acted", Date of Current Status, Remarks as "PR for Action", Assign Date on Received PR for Action Column, and Notes as the modifier
+‎  - Stamp Mode of Procurement 
+‎  - Sign to BAC Secretariat
+‎
+‎PR Deliberation:
+‎  - Assist BAC Regular Meeting
+‎  - Attendance
+‎  - Set up Zoom Meeting send the link thru Procurement Account Gmail
+‎  - Technical(TV, PC, Amplifier, Zoom for COA, Recording Zoom for Transparency and Backup Extraction for BAC Office Copy)
+‎  - Signing Initials for each Approved PRs to BAC Members
+‎- Open Procurement Monitoring Google sheet
+‎  - Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to PR Deliberated Column and Update the Date of Current Status Column, Status into "In Progress", Remarks as "For PhilGEPS Posting", and set Notes as the modifier
+‎  - for Stamp Mode of Procurement, Check either Shopping(only with Certificate with Non-Availability Stocks or mostly only Supplies/Office Equipments or Janitorial/Cleaning Equipments), SVP(Above 50K also 50K Below), Regular Bidding(1M Above)
+‎  - on PhilGEPS and BAC Reso, if ABC is Below 50K check No, if Above 50K check Yes
+‎
+‎RFQ:
+‎- Data Entry for RFQ, Abstract, and Proof of Service:
+‎      - RFQ(Worksheet):
+‎          - Project Reference No.
+‎          - Name of Project
+‎          - Date(Now, but if Above 50K then Tomorrow)
+‎          - Deadline Date(7 Days after Tomorrow, only for Above 50K)
+‎          - Item No.(in 1 row)
+‎          - Item & Description(Possible lots of lines or cells to occupy(in 1 row)
+‎          - QTY(in 1 row)
+‎          - UNIT(in 1 row)
+‎          - Delivery Terms
+‎          - Date of Delivery
+‎          - Place of Delivery
+‎          - Payment Term
+‎          - Estimated Total Cost(Php 47,000.00)
+‎     - ABSTRACT and PROOF OF SERVICE (Worksheet):
+‎       - use "=" and Navigate to RFQ Sheet and Select the data you want to reflect from the to the Abstract Worksheet
+‎       - and CTRL + D for Multiple Reflection of Data
+‎       - use Excel Formulas such as "=QTY*UNIT_COST" and "=SUM(Total)"
+‎       - Input remaining Data for Unit Cost and Total Columns
+‎       - Deadline(If 50K Above Excel Format and the input should be 7 days after the Date from RFQ)
+‎- Double Check this parts:
+‎   - Values
+‎   - Spelling
+‎   - Messy Data
+‎   - Lines/Borders for Printing
+‎   - Format
+‎- If Signature Image isnt Appearing press CTRL + 6
+‎- Print 1 RFQ copy
+‎- Attach PR Form:
+‎- PR No, Received on, Acted on, Published
+‎
+‎Posting:
+‎- Print 4 copies RFQ and 1 Proof of Service
+‎- Attach/Staple envelopes on 3 RFQ, 1 Proof of Service on the Back, 1 RFQ for Posting, Attach TOR/Detailed Specifications/Sample Picture(Optional unless stated on RFQ): Paper Clip All
+‎- Log if its Above or Below:
+‎- PR Number and Title
+‎- ABC
+‎- Stamp Date in leftside of RFQ for Canvass
+‎- Submit the 3 RFQ with Envelopes each and a Proof of Service to BAC Head for Received
+‎- Go to Guard and Ask for Log Book on Posting
+‎- Post the 1 RFQ for Posting on the Bulletin Board
+‎- Submit the 3 RFQ with Envelopes each and a Proof of Service to End User/Canvassers
+‎- Open Procurement Monitoring Google sheet
+‎  - Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to Published Column and Update the Date of Current Status Column, Remarks as "For Canvass", and set Notes as the modifier
+‎
+‎- PhilGEPS Posting(Only for 50k Above)
+‎
+‎RFQ Opening:
+‎- Invitation to Bid
+‎- Put Current Date on Date of Bids Opened on Abstract Worksheet
+‎- Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to RFQ For Canvass, Column and Update the Date of Current Status Column, and set Notes as the modifier
+‎
+‎Canvass:
+‎- Contact and Accomodate Suppliers on how much they bid on each items
+‎- Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to RFQ Opening, Column and Update the Date of Current Status Column, and set Notes as the modifier
+‎
+‎Abstract:
+‎- Calculate Supplier's Quoted Prices on each Items and Validating who qualified and wins Labeling who are in LCRB, SCRB, 1st LCB, 2nd LCB, and so on, and who are Non Compliants and No Bidded Items
+‎- if 1 LOT and has many items and there are items that are are not qualified the it will consider as Failed
+‎
+‎Request Supplier's COR, Business Permit, PhilGEPS, Affidavit:
+‎- Contact Supplier for Further Validation and Business Legitimacy
+‎
+‎Evaluation:
+‎- TWG and End User Specs Evaluation
+‎- Declaration of Winner
+‎
+‎Abstract Checklist, BAC Reso, NOA, NTP:
+‎- Edit Template based on the Purchase Request Document Details
+‎- for BAC Reso, state complete specifically which law basis does a failed procurement cause or reason
+‎- Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to BAC Reso Column and Update the Date of Current Status Column, Remarks as "For P.O.", Supplier Column as Winning Supplier Name, and set Notes as the modifier
+‎
+‎Routing(Signing the BAC Reso, Abstract, Initial to other Documents):
+‎- Note: Always bring a pen before signing
+‎   - BAC Secretariat Head Initial to Chairperson
+‎   - End User(Either GSD, HRD, EEMD, BDD, MISD, OAPIA)
+‎   - BAC Member 1(FD) > Proof of Service must Signed by the Canvasser 
+‎   - Provisional Member(CPD)
+‎   - Vice Chairperson(RALMD)
+‎   - BAC Member 3(VACRD) > If it has Dates, it should have Proof or Attendance before Signing
+‎   - BAC Member 2(LSD) > "Excuse me Attorney, Good Afternoon. [Your Full Name] an Intern from BAC Office asking to sign for RFQ, Abstract, and Proof of Service then BAC Reso Regarding of [Procurement Root Word]"
+‎   - Chairperson(EAD) > Also For Endorsement and Initial for Accounting
+‎   - Accounting(only for 50K Above)
+‎- Double Check the Sign for Abstract and BAC Reso, then initials to RFQ, Proof of Service, other Attachments
+‎
+‎Abstract for PO:
+‎   - Scan all Compiled Procurement Document for BAC Office Copy
+‎   - Photo copy the BAC Checklist
+‎   - Get 1 copy of Abstract, 1 copy of BAC Reso, 1 draft of Abstract, 1 copy of PR, 1 copy of BAC Reso(if 50K Above and even Below but Failed), and any papers with Doctored
+‎   - Log on BAC Outgoing log book 50K B or 50K A and Stamp Date for RFQ for Canvass and Abstract for P.O.
+‎   - Receive Abstract to GSD the one with PR Form Slip
+‎
+‎
+‎Purchase Order:
+‎- GSD Accomodate with Winning Supplier for Order or Purchase of Items, Delivery, and Inspection
+‎
+‎PMR(Failed not included):
+‎   - PR Number
+‎   - Procurement Project Title
+‎   - End User
+‎   - Mode of Procurement(SVP)
+‎   - Open of Bids(Date)
+‎   - Bid Evaluation(Date)
+‎   - ABC(Total and MOOE)
+‎   - Contract Cost(Total and MOOE)
+‎   - Stamp Posted and Date Now(3/9/2026)
+‎
+‎Update PR Monitoring Google Sheets:
+‎   - Search for that PR Number
+‎   - Input PR Data and set as PR for Action:
+‎          - Update the PR Record based on its PR Number then set a current date to Forwarded to GSD for P.O., Column and Update the Date of Current Status Column, Status into "Completed", and set Notes as the modifier
+‎
+‎Archive to Drawer:
+‎   - Insert to what Month and Year that Procurement to Piled with
+‎
+‎Record to File Tracking System:
+‎   - Input Data based on the Archived Copy of Procurement Document
+‎
+‎
+‎Additionals:
+‎
+‎Attaching Proof:
+‎- Compiling Pictures(Lunch or Snacks) as Proof and Attendance
+‎- Attach or Paste the Receipt on a Bond Paper and Photocopy it into 2 copies
+‎
+‎
+‎
+‎Pre procurement Conference:
+‎Pre Bid Conference:
+‎Gmail Account for sending Zoom Link:
+‎E: procurement@piamo.gov.ph
+‎P: PIABACSEC2025@
+‎
+‎Setup Documents and Presentation to present or discuss
+‎
+‎- Start Before the Scheduled Time(15 to 20 mins ahead time schedule)
+‎- Turn on Portable Recorder
+‎- Share Screen only in Presentation
+‎- Start Record when Presentation starts(or Ask BAC Secretariat Head if we should start the recording)
+‎- Chat "Good Morning! Kindly type your name, location, and devices use for attendance purposes. Thank you!" and Copy this Text for sending it again so that this reminder wont behind for people joined the meeting online
+‎- If slide has Picture of Document Zoom it where the Presentor currently reading ke discussing about"
+‎- Hold CTRL + Scroll Up or Down for Zooming
+‎- Hold CTRL + Click to Fully Out Zoom if you're currently zooming and you want to automatically unzoom for next slide
+‎- After End of Presentation wait for questions in Zoom Chat Meeting
+‎- Before Ending the Meeting Capture the Whole Meeting Chat for recording the Attendance of meeting for people joined online
+‎- Turn off Audio and Video, End Recording, and End Meeting
+‎
+‎Bid Opening:
+‎- Zoom Meeting Recording and Sharing Screen
+‎- Monitoring Zoom Chat by asking their name, company name, location, and devices used
+‎- Attendance to each Committees and Suppliers Attend the Bidding
+‎- During introduction each Suppliers for Acknowledging their Bidding Docs Assist for Opening the Sealed and Wrapped Documents and Distribute to Committee Persons
+‎- Encoding on the Opening of Bids Spreadsheet either Passed or Failed  for each Suppliers Bidding Documents
+‎- Validation and Qualification(if Failed one then proceed to next Supplier)
+‎- After All Biddings If Bidder has discount:
+‎   =Bid Amount
+‎   =Bid Amount * .025(2.5% Discount)
+‎   =Bid Amount - 2.5% Discount
+‎- Declaration who is LCRB, 1st LCB, 2nd LCB... and So on
+‎
+‎TWG Evaluation:
+‎- Setting up Zoom, Sharing Screen, and Recording
+‎- Usually TWGs are the one who present
+‎- Attendance Committees during the meeting
+‎- Assist for other Documents Signing
+‎
+‎Post Qualification:
+‎- Declaring who Qualifies during Bidding
+‎- Editing a Templated Document
+‎
+‎Contract Signing:
+‎
+‎Compiling all the Documents for Copies:
+‎- Photocopy all Original Documents(upto 4 for End User, Accounting, COA, and BAC Copy)
+‎- Print Identification Checklist per Pages
+‎- Stamp a Certified True Copy Stamp
+‎- Put Dates Each Stamps
+‎- Puncher Each
+‎- Insert it thru Fastener or Blue Binder
+‎- Attach Tabbings with Letters on each Printed Identification Checklist Pages
+‎- Print Checklist for 4 copies
+‎- Print Transmittal Letter for each copies 
+‎- Initial to BAC Sec Head
+‎- E-sig or Sign to BAC Chairperson
+‎- And to be received by End User, COA, and Accounting
+‎- Sign Checklist to BAC Sec Head
+‎- Attach both Transmittal and Checklist
+‎- Sign to BAC Sec Head for each Stamp
+‎- Print a Label and Attach and Forwarded to End User, COA and Accounting
+‎- Received for COA, Accounting, and End User using Outgoing Documents Log Book
+‎
+
+
+
+
+
+
 - brighten or change the calendar icon color into white so that it is visible in Dates in Monitoring Process Page, Edit Modal and Add Procurement Page
 
 - turn back the previous input structure for the dates into typable in Monitoring Process Page, Edit Modal and Add Procurement Page
