@@ -57,6 +57,33 @@ export const onProcurementsChange = (callback: (procurements: Procurement[]) => 
     return onValue(procurementsRef, (snapshot) => {
         const data = snapshot.val();
         const procurements = data ? Object.values(data) as Procurement[] : [];
+
+        let needsDbSync = false;
+
+        procurements.forEach(p => {
+            if (p.supplier) {
+                // Determine if it matches typical base64 pattern and does not contain spaces
+                if (/^[A-Za-z0-9+/=]{8,}$/.test(p.supplier) && !p.supplier.includes(' ')) {
+                    try {
+                        let decoded = atob(p.supplier);
+                        try {
+                            decoded = decodeURIComponent(escape(decoded));
+                        } catch (e) {
+                            // ignore URI malform
+                        }
+                        // Verify if the result looks like a readable human string (ASCII bounds check)
+                        if (/^[\x20-\x7E]+$/.test(decoded)) {
+                            p.supplier = decoded;
+                            // Silently sync the fix back to the database
+                            update(ref(db, `procurements/${p.id}`), { supplier: decoded });
+                        }
+                    } catch (e) {
+                        // Not base64
+                    }
+                }
+            }
+        });
+
         callback(procurements);
     });
 };
@@ -542,6 +569,21 @@ export const addProcurement = async (
     } else if (newProcurement.boxId) {
         await recalculateStackNumbers(undefined, newProcurement.boxId);
     }
+    
+    // Auto-add supplier if new
+    if (newProcurement.supplier) {
+        const suppliers = await getSuppliers();
+        const existing = suppliers.find(s => s.name.trim().toLowerCase() === newProcurement.supplier!.trim().toLowerCase());
+        if (!existing) {
+            await addSupplier({
+                name: newProcurement.supplier.trim(),
+                contactPerson: '',
+                email: '',
+                phone: '',
+                address: ''
+            });
+        }
+    }
 
     return newProcurement;
 };
@@ -606,6 +648,22 @@ export const updateProcurement = async (
         // If moving between boxes
         if (updates.boxId && currentProcurement?.boxId && updates.boxId !== currentProcurement.boxId) {
             await recalculateStackNumbers(undefined, currentProcurement.boxId);
+        }
+    }
+
+    // Auto-add supplier if new
+    const supplierName = updates.supplier;
+    if (supplierName) {
+        const suppliers = await getSuppliers();
+        const existing = suppliers.find(s => s.name.trim().toLowerCase() === supplierName.trim().toLowerCase());
+        if (!existing) {
+            await addSupplier({
+                name: supplierName.trim(),
+                contactPerson: '',
+                email: '',
+                phone: '',
+                address: ''
+            });
         }
     }
 };

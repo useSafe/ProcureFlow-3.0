@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Cabinet, Shelf, Folder, Box, Procurement } from '@/types/procurement';
 import { onCabinetsChange, onShelvesChange, onFoldersChange, onBoxesChange, onProcurementsChange, onDatabaseSizeChange } from '@/lib/storage';
 

@@ -10,20 +10,20 @@ import AppLayout from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import UserManagement from "@/pages/UserManagement";
 import Dashboard from "@/pages/Dashboard";
-import Cabinets from "@/pages/Cabinets";
-import Shelves from "@/pages/Shelves";
-import Folders from "@/pages/Folders";
+import StorageHub from "@/pages/StorageHub";
 import Divisions from "@/pages/Divisions";
-import Boxes from "@/pages/Boxes";
 import VisualAllocation from "@/pages/VisualAllocation";
-import AddProcurement from "@/pages/AddProcurement";
+import ProcurementHub from "@/pages/ProcurementHub";
 import ProcurementList from "@/pages/ProcurementList";
 import SVPList from "@/pages/SVPList";
 import RegularList from "@/pages/RegularList";
-import ProgressTracking from "@/pages/ProgressTracking";
 import Suppliers from "@/pages/Suppliers";
 import UrgentRecords from "@/pages/UrgentRecords";
+import ProcurementProcessFlow from "@/pages/ProcurementProcessFlow";
+import ProcessFlowChart from "@/pages/ProcessFlowChart";
+import Settings from "@/pages/Settings";
 import NotFound from "./pages/NotFound";
+import ManualGuide from "@/pages/ManualGuide";
 
 const queryClient = new QueryClient();
 
@@ -37,160 +37,41 @@ const AppRoutes = () => {
         element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
       />
       <Route
-        path="/users"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <UserManagement />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/"
         element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
       />
 
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Dashboard />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cabinets"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Cabinets /> {/* Changed from Cabinets */}
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/shelves"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Shelves />  {/* Changed from Shelves */}
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/folders"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Folders />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/divisions"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Divisions />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/boxes"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Boxes />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/visual-allocation"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <VisualAllocation />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/procurement/add"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <AddProcurement />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/procurement/list"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <ProcurementList />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/procurement/svp"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <SVPList />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/procurement/regular"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <RegularList />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/procurement/progress"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <ProgressTracking />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/suppliers"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Suppliers />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/urgent-records"
-        element={
-          <ProtectedRoute>
-            <AppLayout>
-              <UrgentRecords />
-            </AppLayout>
-          </ProtectedRoute>
-        }
-      />
+      {/* Dashboard */}
+      <Route path="/dashboard" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+
+      {/* Procurement Hub — Add | Records | Tracking */}
+      <Route path="/procurement" element={<ProtectedRoute><AppLayout><ProcurementHub /></AppLayout></ProtectedRoute>} />
+      {/* Legacy redirects */}
+      <Route path="/procurement/add" element={<Navigate to="/procurement?tab=add" replace />} />
+      <Route path="/procurement/list" element={<ProtectedRoute><AppLayout><ProcurementList /></AppLayout></ProtectedRoute>} />
+      <Route path="/procurement/svp" element={<ProtectedRoute><AppLayout><SVPList /></AppLayout></ProtectedRoute>} />
+      <Route path="/procurement/regular" element={<ProtectedRoute><AppLayout><RegularList /></AppLayout></ProtectedRoute>} />
+      <Route path="/procurement/progress" element={<Navigate to="/procurement?tab=tracking" replace />} />
+
+      {/* Storage Hub — Drawers | Cabinets | Folders | Boxes */}
+      <Route path="/storage" element={<ProtectedRoute><AppLayout><StorageHub /></AppLayout></ProtectedRoute>} />
+      {/* Legacy redirects */}
+      <Route path="/cabinets" element={<Navigate to="/storage?tab=cabinets" replace />} />
+      <Route path="/shelves" element={<Navigate to="/storage?tab=drawers" replace />} />
+      <Route path="/folders" element={<Navigate to="/storage?tab=folders" replace />} />
+      <Route path="/boxes" element={<Navigate to="/storage?tab=boxes" replace />} />
+
+      {/* Other Pages */}
+      <Route path="/visual-allocation" element={<ProtectedRoute><AppLayout><VisualAllocation /></AppLayout></ProtectedRoute>} />
+      <Route path="/suppliers" element={<ProtectedRoute><AppLayout><Suppliers /></AppLayout></ProtectedRoute>} />
+      <Route path="/urgent-records" element={<ProtectedRoute><AppLayout><UrgentRecords /></AppLayout></ProtectedRoute>} />
+      <Route path="/divisions" element={<ProtectedRoute><AppLayout><Divisions /></AppLayout></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute><AppLayout><UserManagement /></AppLayout></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><AppLayout><Settings /></AppLayout></ProtectedRoute>} />
+      <Route path="/process-flow" element={<ProtectedRoute><AppLayout><ProcurementProcessFlow /></AppLayout></ProtectedRoute>} />
+      <Route path="/flow-chart" element={<ProtectedRoute><AppLayout><ProcessFlowChart /></AppLayout></ProtectedRoute>} />
+      <Route path="/manual" element={<ProtectedRoute><AppLayout><ManualGuide /></AppLayout></ProtectedRoute>} />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -200,7 +81,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      <Sonner position="top-center" expand={false} richColors closeButton />
       <BrowserRouter>
         <AuthProvider>
           <DataProvider>

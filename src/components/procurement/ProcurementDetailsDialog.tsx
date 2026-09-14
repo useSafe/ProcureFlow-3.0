@@ -43,17 +43,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
     };
 
     const getCurrentStage = (p: Procurement) => {
-        if (p.procurementType === 'SVP') {
-            if (p.poNtpForwardedGsdDate) return 'Add PO/NTP forwarded to GSD';
-            if (p.forwardedGsdDate) return 'Forwarded GSD for P.O.';
-            if (p.bacResolutionDate) return 'BAC Resolution';
-            if (p.rfqOpeningDate) return 'RFQ Opening';
-            if (p.rfqCanvassDate) return 'RFQ for Canvass';
-            if (p.publishedDate) return 'Published';
-            if (p.prDeliberatedDate) return 'PR Deliberated';
-            if (p.receivedPrDate) return 'Received PR for Action';
-            return 'Not yet Acted';
-        } else {
+        if (p.procurementType === 'Regular Bidding') {
             // Regular Bidding - Check in reverse chronological order (latest step first)
             if (p.awardedToDate) return 'Awarded to Supplier';
             if (p.forwardedOapiDate) return 'Forwarded to OAPIA';
@@ -70,6 +60,25 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
             if (p.prDeliberatedDate) return 'PR Deliberated';
             if (p.receivedPrDate) return 'Received PR for Action';
             return 'Not yet Acted';
+        } else if (p.procurementType === 'Shopping') {
+            if (p.shoppingPurchaseOrderDate) return 'Purchase Order Issued';
+            if (p.shoppingAbstractDate) return 'Abstract & LCRB';
+            if (p.shoppingCanvassDate) return 'Canvass / Price Inquiry';
+            if (p.shoppingRfqDate) return 'RFQ Preparation';
+            if (p.shoppingBudgetCertDate) return 'Budget Certification (CNAS)';
+            if (p.shoppingReceivedDate) return 'Received PR for Action';
+            return 'Not yet Acted';
+        } else {
+            // SVP
+            if (p.poNtpForwardedGsdDate) return 'Add PO/NTP forwarded to GSD';
+            if (p.forwardedGsdDate) return 'Forwarded GSD for P.O.';
+            if (p.bacResolutionDate) return 'BAC Resolution';
+            if (p.rfqOpeningDate) return 'RFQ Opening';
+            if (p.rfqCanvassDate) return 'RFQ for Canvass';
+            if (p.publishedDate) return 'Published';
+            if (p.prDeliberatedDate) return 'PR Deliberated';
+            if (p.receivedPrDate) return 'Received PR for Action';
+            return 'Not yet Acted';
         }
     };
 
@@ -78,15 +87,15 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
     const currentStage = getCurrentStage(procurement);
     let effectiveStatus = pStatus;
 
-    // Auto-In Progress Logic
+    // Auto-Processing Logic
     if ((effectiveStatus === 'Not yet Acted' || !effectiveStatus) && currentStage !== 'Not yet Acted' && currentStage !== 'Received PR for Action') {
-        effectiveStatus = 'In Progress';
+        effectiveStatus = 'Processing';
     }
 
     let statusColorClass = '';
     switch (effectiveStatus) {
         case 'Completed': statusColorClass = 'text-emerald-400'; break;
-        case 'In Progress': statusColorClass = 'text-blue-400'; break;
+        case 'Processing': statusColorClass = 'text-blue-400'; break;
         case 'Returned PR to EU': statusColorClass = 'text-purple-400'; break;
         case 'Failure': statusColorClass = 'text-red-400'; break;
         case 'Cancelled': statusColorClass = 'text-orange-400'; break;
@@ -95,7 +104,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-6xl bg-[#0f172a] border-slate-800 text-white max-h-[90vh] overflow-y-auto block p-0">
+            <DialogContent className="max-w-6xl bg-background border-border text-foreground max-h-[90vh] overflow-y-auto block p-0">
                 <div className="p-6">
                     <DialogHeader>
                         <div className="flex items-start justify-between">
@@ -109,7 +118,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         {procurement.status === 'active' ? 'Borrowed' : 'Archived'}
                                     </Badge>
                                 </DialogTitle>
-                                <DialogDescription className="text-slate-400 mt-1">
+                                <DialogDescription className="text-muted-foreground mt-1">
                                     {procurement.projectName || 'No Project Name'}
                                 </DialogDescription>
                             </div>
@@ -120,31 +129,31 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                         <div className="space-y-6 py-4">
                             {/* Summary Cards */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-800">
-                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">End User</label>
+                                <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">End User</label>
                                     <div className="flex items-center gap-2 mt-1">
                                         <Layers className="h-4 w-4 text-blue-400" />
                                         <span>{procurement.division || 'N/A'}</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-800">
-                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Type</label>
+                                <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Type</label>
                                     <div className="flex items-center gap-2 mt-1">
                                         <Tag className="h-4 w-4 text-purple-400" />
                                         <span>{procurement.procurementType || 'Regular Bidding'}</span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-800">
-                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Process Status</label>
+                                <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Process Status</label>
                                     <div className="flex items-center gap-2 mt-1">
-                                        <Activity className="h-4 w-4 text-slate-400" />
+                                        <Activity className="h-4 w-4 text-muted-foreground" />
                                         <span className={`font-medium ${statusColorClass}`}>
                                             {effectiveStatus}
                                         </span>
                                     </div>
                                 </div>
-                                <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-800">
-                                    <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Location</label>
+                                <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                    <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Location</label>
                                     <div className="flex items-center gap-2 mt-1">
                                         <MapPin className="h-4 w-4 text-pink-400" />
                                         <span className="truncate" title={getLocationString(procurement)}>
@@ -165,21 +174,21 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {procurement.abc && (
-                                            <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-700">
-                                                <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">ABC (Approved Budget)</label>
+                                            <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-1">ABC (Approved Budget)</label>
                                                 <p className="text-lg font-bold text-emerald-400 font-mono">₱{parseFloat(String(procurement.abc)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                             </div>
                                         )}
                                         {procurement.bidAmount && (
-                                            <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-700">
-                                                <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Bid Amount (Contract Price)</label>
+                                            <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-1">Bid Amount (Contract Price)</label>
                                                 <p className="text-lg font-bold text-blue-400 font-mono">₱{parseFloat(String(procurement.bidAmount)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                             </div>
                                         )}
                                         {procurement.supplier && (
-                                            <div className="p-3 bg-[#1e293b]/50 rounded-lg border border-slate-700">
-                                                <label className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Supplier / Awarded to</label>
-                                                <p className="text-sm font-medium text-slate-200">{procurement.supplier}</p>
+                                            <div className="p-3 bg-card/50 rounded-lg border border-border">
+                                                <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold block mb-1">Supplier / Awarded to</label>
+                                                <p className="text-sm font-medium text-foreground">{procurement.supplier}</p>
                                             </div>
                                         )}
                                     </div>
@@ -189,8 +198,8 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                             {/* Main Details */}
                             <div className="space-y-4">
                                 <div>
-                                    <h3 className="text-lg font-semibold border-b border-slate-800 pb-2 mb-3">Description / Remarks</h3>
-                                    <p className="text-slate-200 leading-relaxed bg-[#1e293b] p-4 rounded-md text-sm border border-slate-700/50">
+                                    <h3 className="text-lg font-semibold border-b border-border pb-2 mb-3">Description / Remarks</h3>
+                                    <p className="text-foreground leading-relaxed bg-card p-4 rounded-md text-sm border border-border/50">
                                         {procurement.description || procurement.remarks || 'N/A'}
                                     </p>
                                 </div>
@@ -198,37 +207,39 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                 {/* Notes */}
                                 {procurement.notes && (
                                     <div>
-                                        <h3 className="text-lg font-semibold border-b border-slate-800 pb-2 mb-3">Notes</h3>
-                                        <p className="text-slate-200 leading-relaxed bg-[#1e293b] p-4 rounded-md text-sm border border-slate-700/50 whitespace-pre-wrap">
+                                        <h3 className="text-lg font-semibold border-b border-border pb-2 mb-3">Notes</h3>
+                                        <p className="text-foreground leading-relaxed bg-card p-4 rounded-md text-sm border border-border/50 whitespace-pre-wrap">
                                             {procurement.notes}
                                         </p>
                                     </div>
                                 )}
 
                                 <div>
-                                    <div className="border-b border-slate-800 pb-2 mb-3">
+                                    <div className="border-b border-border pb-2 mb-3">
                                         <h3 className="text-lg font-semibold">Monitoring Process</h3>
-                                        <p className="text-sm text-slate-400">Key dates and status.</p>
+                                        <p className="text-sm text-muted-foreground">Key dates and status.</p>
                                     </div>
 
                                     <div className="space-y-6">
                                         {/* Pre-Procurement */}
-                                        <div className="space-y-4">
-                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                <div className="space-y-1">
-                                                    <label className="text-xs text-slate-500 block">Received PR</label>
-                                                    <p className="font-mono text-sm text-slate-200">{formatDate(procurement.receivedPrDate)}</p>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-xs text-slate-500 block">PR Deliberated</label>
-                                                    <p className="font-mono text-sm text-slate-200">{formatDate(procurement.prDeliberatedDate)}</p>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <label className="text-xs text-slate-500 block">Published</label>
-                                                    <p className="font-mono text-sm text-slate-200">{formatDate(procurement.publishedDate)}</p>
+                                        {procurement.procurementType !== 'Shopping' && (
+                                            <div className="space-y-4">
+                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs text-muted-foreground block">Received PR</label>
+                                                        <p className="font-mono text-sm text-foreground">{formatDate(procurement.receivedPrDate)}</p>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs text-muted-foreground block">PR Deliberated</label>
+                                                        <p className="font-mono text-sm text-foreground">{formatDate(procurement.prDeliberatedDate)}</p>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-xs text-muted-foreground block">Published</label>
+                                                        <p className="font-mono text-sm text-foreground">{formatDate(procurement.publishedDate)}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* Bidding / Canvass */}
                                         <div className="space-y-4">
@@ -236,27 +247,54 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                                 {procurement.procurementType === 'Regular Bidding' ? (
                                                     <>
                                                         <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Pre-bid Conf</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.preBidDate)}</p>
+                                                            <label className="text-xs text-muted-foreground block">Pre-bid Conf</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.preBidDate)}</p>
                                                         </div>
                                                         <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Bid Opening</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.bidOpeningDate)}</p>
+                                                            <label className="text-xs text-muted-foreground block">Bid Opening</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.bidOpeningDate)}</p>
                                                         </div>
                                                         <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Bid Eval Report</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.bidEvaluationDate)}</p>
+                                                            <label className="text-xs text-muted-foreground block">Bid Eval Report</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.bidEvaluationDate)}</p>
+                                                        </div>
+                                                    </>
+                                                ) : procurement.procurementType === 'Shopping' ? (
+                                                    <>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">Received PR</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingReceivedDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">Budget Cert</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingBudgetCertDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">RFQ Prep</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingRfqDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">Canvass / Price Inquiry</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingCanvassDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">Abstract</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingAbstractDate)}</p>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs text-muted-foreground block">Purchase Order Issued</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.shoppingPurchaseOrderDate)}</p>
                                                         </div>
                                                     </>
                                                 ) : (
                                                     <>
                                                         <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">RFQ for Canvass</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.rfqCanvassDate)}</p>
+                                                            <label className="text-xs text-muted-foreground block">RFQ for Canvass</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.rfqCanvassDate)}</p>
                                                         </div>
                                                         <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">RFQ Opening</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.rfqOpeningDate)}</p>
+                                                            <label className="text-xs text-muted-foreground block">RFQ Opening</label>
+                                                            <p className="font-mono text-sm text-foreground">{formatDate(procurement.rfqOpeningDate)}</p>
                                                         </div>
                                                     </>
                                                 )}
@@ -264,67 +302,63 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         </div>
 
                                         {/* Qualification & Award */}
-                                        <div className="space-y-4">
-                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                {procurement.procurementType === 'Regular Bidding' ? (
-                                                    <>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Post-Qualification</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.postQualDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Post-Qual Report</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.postQualReportDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Forwarded to OAPIA</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.forwardedOapiDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Notice of Award</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.noaDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Contract Date</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.contractDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Notice to Proceed (NTP)</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.ntpDate)}</p>
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <div className="space-y-1">
-                                                        <label className="text-xs text-slate-500 block">BAC Resolution</label>
-                                                        <p className="font-mono text-sm text-slate-200">{formatDate(procurement.bacResolutionDate)}</p>
-                                                    </div>
-                                                )}
-
-                                                {procurement.procurementType === 'Regular Bidding' ? (
-                                                    <>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Awarded Date</label>
-                                                            <p className="font-mono text-sm text-emerald-400 font-semibold">{formatDate(procurement.awardedToDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">Supplier</label>
-                                                            <p className="font-medium text-sm text-slate-200">{procurement.supplier || 'N/A'}</p>
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">To GSD</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.forwardedGsdDate)}</p>
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <label className="text-xs text-slate-500 block">PO/NTP to GSD</label>
-                                                            <p className="font-mono text-sm text-slate-200">{formatDate(procurement.poNtpForwardedGsdDate)}</p>
-                                                        </div>
-                                                    </>
-                                                )}
+                                        {procurement.procurementType !== 'Shopping' && (
+                                            <div className="space-y-4">
+                                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                    {procurement.procurementType === 'Regular Bidding' ? (
+                                                        <>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Post-Qualification</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.postQualDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Post-Qual Report</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.postQualReportDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Forwarded to OAPIA</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.forwardedOapiDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Notice of Award</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.noaDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Contract Date</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.contractDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Notice to Proceed (NTP)</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.ntpDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Awarded Date</label>
+                                                                <p className="font-mono text-sm text-emerald-400 font-semibold">{formatDate(procurement.awardedToDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">Supplier</label>
+                                                                <p className="font-medium text-sm text-foreground">{procurement.supplier || 'N/A'}</p>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">BAC Resolution</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.bacResolutionDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">To GSD</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.forwardedGsdDate)}</p>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs text-muted-foreground block">PO/NTP to GSD</label>
+                                                                <p className="font-mono text-sm text-foreground">{formatDate(procurement.poNtpForwardedGsdDate)}</p>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -337,16 +371,16 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         </h4>
                                         <div className="grid grid-cols-2 gap-4 text-sm">
                                             <div>
-                                                <span className="text-slate-500">Borrowed By:</span>
-                                                <p className="font-medium text-slate-200">{procurement.borrowedBy}</p>
+                                                <span className="text-muted-foreground">Borrowed By:</span>
+                                                <p className="font-medium text-foreground">{procurement.borrowedBy}</p>
                                             </div>
                                             <div>
-                                                <span className="text-slate-500">Division:</span>
-                                                <p className="font-medium text-slate-200">{procurement.borrowerDivision || 'N/A'}</p>
+                                                <span className="text-muted-foreground">Division:</span>
+                                                <p className="font-medium text-foreground">{procurement.borrowerDivision || 'N/A'}</p>
                                             </div>
                                             <div>
-                                                <span className="text-slate-500">Date Borrowed:</span>
-                                                <p className="font-medium text-slate-200">{formatDate(procurement.borrowedDate)}</p>
+                                                <span className="text-muted-foreground">Date Borrowed:</span>
+                                                <p className="font-medium text-foreground">{formatDate(procurement.borrowedDate)}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -359,7 +393,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                             <User className="h-4 w-4" />
                                             Current Borrower Info
                                         </h4>
-                                        <p className="text-sm text-slate-500 italic">No borrower details recorded.</p>
+                                        <p className="text-sm text-muted-foreground italic">No borrower details recorded.</p>
                                     </div>
                                 )}
 
@@ -373,32 +407,32 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         <div className="grid grid-cols-2 gap-4 text-sm">
                                             {procurement.borrowedBy && (
                                                 <div>
-                                                    <span className="text-slate-500">Borrowed By:</span>
-                                                    <p className="font-medium text-slate-200">{procurement.borrowedBy}</p>
+                                                    <span className="text-muted-foreground">Borrowed By:</span>
+                                                    <p className="font-medium text-foreground">{procurement.borrowedBy}</p>
                                                 </div>
                                             )}
                                             {procurement.borrowerDivision && (
                                                 <div>
-                                                    <span className="text-slate-500">Borrower Division:</span>
-                                                    <p className="font-medium text-slate-200">{procurement.borrowerDivision}</p>
+                                                    <span className="text-muted-foreground">Borrower Division:</span>
+                                                    <p className="font-medium text-foreground">{procurement.borrowerDivision}</p>
                                                 </div>
                                             )}
                                             {procurement.borrowedDate && (
                                                 <div>
-                                                    <span className="text-slate-500">Date Borrowed:</span>
-                                                    <p className="font-medium text-slate-200">{formatDate(procurement.borrowedDate)}</p>
+                                                    <span className="text-muted-foreground">Date Borrowed:</span>
+                                                    <p className="font-medium text-foreground">{formatDate(procurement.borrowedDate)}</p>
                                                 </div>
                                             )}
                                             {procurement.returnedBy && (
                                                 <div>
-                                                    <span className="text-slate-500">Returned By:</span>
-                                                    <p className="font-medium text-slate-200">{procurement.returnedBy}</p>
+                                                    <span className="text-muted-foreground">Returned By:</span>
+                                                    <p className="font-medium text-foreground">{procurement.returnedBy}</p>
                                                 </div>
                                             )}
                                             {procurement.returnDate && (
                                                 <div>
-                                                    <span className="text-slate-500">Date Returned:</span>
-                                                    <p className="font-medium text-slate-200">{formatDate(procurement.returnDate)}</p>
+                                                    <span className="text-muted-foreground">Date Returned:</span>
+                                                    <p className="font-medium text-foreground">{formatDate(procurement.returnDate)}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -407,9 +441,9 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
 
                                 {/* Checklist Summary (Hide for special types) */}
                                 {!['Attendance Sheets', 'Others'].includes(procurement.procurementType || '') && (
-                                    <Card className="bg-[#1e293b] border-slate-700 mb-6">
+                                    <Card className="bg-card border-border mb-6">
                                         <CardHeader className="pb-3">
-                                            <CardTitle className="text-sm font-medium text-slate-200 flex items-center gap-2">
+                                            <CardTitle className="text-sm font-medium text-foreground flex items-center gap-2">
                                                 <FileText className="h-4 w-4 text-emerald-400" />
                                                 Documents Handed Over
                                             </CardTitle>
@@ -418,18 +452,37 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                             <ScrollArea className="h-[300px] pr-4">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                     {CHECKLIST_ITEMS.map((item) => (
-                                                        <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-slate-800/30 transition-colors">
+                                                        <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-muted/30 transition-colors">
                                                             <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
                                                                 ? 'bg-blue-600 border-blue-600'
-                                                                : 'border-slate-600'
+                                                                : 'border-border'
                                                                 }`}>
                                                                 {procurement.checklist?.[item.key as keyof typeof procurement.checklist] && (
                                                                     <span className="text-white text-[10px]">✓</span>
                                                                 )}
                                                             </div>
                                                             <span className={`text-xs leading-tight ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
-                                                                ? 'text-slate-200'
-                                                                : 'text-slate-500'
+                                                                ? 'text-foreground'
+                                                                : 'text-muted-foreground'
+                                                                }`}>
+                                                                {item.label}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {/* Custom Checklist Items */}
+                                                    {procurement.customChecklistItems?.map((item) => (
+                                                        <div key={item.key} className="flex items-start gap-3 p-2 rounded hover:bg-muted/30 transition-colors">
+                                                            <div className={`mt-0.5 h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
+                                                                ? 'bg-blue-600 border-blue-600'
+                                                                : 'border-border'
+                                                                }`}>
+                                                                {procurement.checklist?.[item.key as keyof typeof procurement.checklist] && (
+                                                                    <span className="text-white text-[10px]">✓</span>
+                                                                )}
+                                                            </div>
+                                                            <span className={`text-xs leading-tight ${procurement.checklist?.[item.key as keyof typeof procurement.checklist]
+                                                                ? 'text-foreground'
+                                                                : 'text-muted-foreground'
                                                                 }`}>
                                                                 {item.label}
                                                             </span>
@@ -440,7 +493,7 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                                         </CardContent>
                                     </Card>
                                 )}
-                                <div className="pt-4 border-t border-slate-800 grid grid-cols-2 md:grid-cols-3 gap-4 text-xs text-slate-500">
+                                <div className="pt-4 border-t border-border grid grid-cols-2 md:grid-cols-3 gap-4 text-xs text-muted-foreground">
                                     <div>
                                         <span className="block font-semibold mb-1">Created By</span>
                                         <span>{procurement.createdByName || 'Unknown'}</span>
@@ -460,8 +513,8 @@ const ProcurementDetailsDialog: React.FC<ProcurementDetailsDialogProps> = ({
                         </div>
                     </div>
 
-                    <div className="flex justify-end pt-4 border-t border-slate-800">
-                        <Button variant="outline" onClick={() => onOpenChange(false)} className="bg-[#1e293b] border-slate-700 hover:bg-slate-800 text-white">
+                    <div className="flex justify-end pt-4 border-t border-border">
+                        <Button variant="outline" onClick={() => onOpenChange(false)} className="bg-card border-border hover:bg-muted text-white">
                             Close
                         </Button>
                     </div>

@@ -2,7 +2,7 @@
 
 // Location Hierarchy Types
 export type ProcurementStatus = 'active' | 'archived';
-export type UrgencyLevel = 'Low' | 'Medium' | 'High' | 'Critical';
+export type UrgencyLevel = 'Low' | 'High' | 'Done' | 'None';
 export interface Cabinet {
     id: string;
     name: string;
@@ -59,7 +59,7 @@ export interface ProcurementChecklist {
 // Expanded Statuses
 export type ProcurementProcessStatus =
     | 'Completed'
-    | 'In Progress'
+    | 'Processing'
     | 'Returned PR to EU'
     | 'Not yet Acted'
     | 'Failure'
@@ -110,7 +110,18 @@ export interface Procurement {
     noaDate?: string;
     contractDate?: string;
     ntpDate?: string;
-    awardedToDate?: string; // Date Awarded
+    awardedToDate?: string;
+
+    // Monitoring Dates - Shopping
+    shoppingReceivedDate?: string;
+    shoppingBudgetCertDate?: string;
+    shoppingRfqDate?: string;
+    shoppingCanvassDate?: string;
+    shoppingAbstractDate?: string;
+    shoppingPurchaseOrderDate?: string;
+
+    // Physical storage status
+    storageStatus?: 'Processing' | 'In Storage';
 
     supplier?: string;
     bidAmount?: number;
@@ -121,13 +132,14 @@ export interface Procurement {
     deadline?: string;
 
     // Metadata
-    procurementType?: 'Regular Bidding' | 'SVP' | 'Attendance Sheets' | 'Receipt' | 'Others';
+    procurementType?: 'Regular Bidding' | 'SVP' | 'Shopping' | 'Attendance Sheets' | 'Receipt' | 'Others';
     division?: string; // "End User"
 
     procurementDate?: string; // Alias for publishedDate if needed
     disposalDate?: string;
 
     checklist?: ProcurementChecklist;
+    customChecklistItems?: {key: string, label: string}[];
 
     // Borrower tracking
     borrowedBy?: string;
