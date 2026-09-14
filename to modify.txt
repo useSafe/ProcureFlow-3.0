@@ -1,0 +1,144 @@
+Generate Presentation Contents:
+
+Topics to Discussed:
+- Context or What projects all about including its PRD
+- Usage Process Elaboration Step by Step
+- Situation Demonstration
+
+
+
+Done:
+- Other Documents Tab in Add Procurement Page has still no PR Number Input but Optional and if blank generate an Other Document ID
+- Urgent Records should only has High(Red) and Low(Blue) Status, then those Values of each records on the Urgency Column should has empty as default not medium values
+- Dashboard Page. Specifically in Calendar Chart should highlight the Day Cells where it has Urgent Status like if High is Red and Low is Blue and below the Day Cell should reflect how many Deadline Records on that day then if hover it will also list PR Number only of what records are urgent at that day. then on Urgent Records tab in Sidebar should display how many total Urgent Records was setted urgent both High and Low Records, also on Notifications Icon on Top Navigation Bar then List inside what are those Urgent Records both low and high
+- This part isnt still modified or implemented: Make the Filters in Records page which is Status: Select status Borrowed Archived. Add Processing which Filters Records based on this Select Component in a row of record:
+<SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+       <SelectItem value="active" className="text-orange-400 focus:text-orange-400 text-xs">Borrowed</SelectItem>
+       <SelectItem value="in-progress" className="text-blue-400 focus:text-blue-400 text-xs">In Progress</SelectItem>
+       <SelectItem value="archived" className="text-slate-300 focus:text-white text-xs">In Storage</SelectItem>
+</SelectContent>
+but instead of In Progress, change it into 'Processing'
+- Include the Processing in the Dropdown menu of Edit Modal on part of dropdown for In Storage and Archived in Records Page
+- for Direct Box, Optional Folder per Document. also Direct Drawer>Cabinet, Optional Folder per Document
+- Unencrypt all Supplier Names per Records or Include to the List of Supplier Records all the Registered Record's Supplier per Records on Database Directly
+
+
+
+To Implement(Now Validate):
+- Include All Details to be exported in CSV(Include Supplier), and make a Formatted CSV File Extraction(with styles, formats, and other things to make the masterlist visualizable table)
+- Add other Peripherals like AI, Manual Guide, Profile Pics, Security and more:
+	- Export Include Supplier
+	- Manual Guide Step by Step Process(with images)
+		- Storage(Adding Drawer>Cabinet>Folder or Drawer>Cabinet and Box> Folder or Box Only
+		- Add Division
+		- Add Procurement
+		- Procurement Records(Viewing, Editing or Modifying)
+		- Urgent Records(for tracking what are urgent records)
+		- Progress Tracking(not in a usual Process only for viewing)
+		- Add Supplier(if there's Unregistered Supplier to be based on the winning Procurement)
+		- User management(for adding new users, setting roles, and managing them)
+		- Dashboard Analytics
+		- other Optional Peripherals(Process Flow Guide, Manual Guide, ProcureFlow Guide Chatbot(Redirection Guides), Settings)
+	- AI Chatbot into floatable activation Button(make it Movable, and add more navigation guides)
+	- Settings Alarm Modification or setting of specific time for alarming in Starting Work, Lunch, Pack up time, also set how many seconds it will last, and the message to put. and instead of toast make it whole page modal
+	- Regular Bidding Checklist(Add an Unlimited Auto Generate Input cause some part of Checklist wasnt included on the default list) and Remove this process on Add SVP Documents
+	- Profile and User Management
+- Synchronize the Color Pallete on Switch Theme Adaptation(Tracking and Process Flow Guide Pages and other Buttons on other pages)
+- Add a Suggestions on Searching using the Search Box on the Top Navigation Bar with upto 10 suggestions only
+- Dont Display Medium Urgency Levels in Dashboard
+- fix the Rendering of Add Procurement and Progress Tracking Pages, make it smooth just like others
+- Make the Visual Map specifically displaying the Direct to Box with no Folder and Directt o Cabinet no Folder Files by displaying it like a Files Visual Appearance instead of Folder look like
+- Dashboard(make the Monthly Trends per Mode of Procurement chart responsive to years dropdown, and it should be per week not months so that it will display spikes instead of 1 hill like only. but it should display the whole 6 months but spikes should be per week)
+- for the Other Documents Form inputs apply a state management just like the SVP and Regular Bidding where after i input something all then i didnt submit it rather i go to other pages it then after i go back all the inputs i do was reset or erased. fix that problem by retaining the inputs even i go to other pages
+- Trasnfer Process Flow Guide and Manual Guide only accessible through Help tab in Settings
+- make the color pallete into gradient blue like this in the image and the white should be not too white rather the kind of white that is not causing an eye strain rather like a dirty like white
+
+
+
+______________________________________________________________________________________________________
+
+
+
+- Dashboard and Urgent Records Reflection of Urgent Procurement Problem:
+	- on Notifications dont display the Calendar, and make the list of Urgent Procurment Records in Deadlines making it redirectable to Records Page
+	- Deadlines Calendar Chart on Dashboard Page add Display also the Cells with Deadline Procurement Records either High or Low only remove the Critical, Medium, and None. and make it Highlighted the Cells not the Text only with color rather it should be whole cell of that day, then add a Legend on top of the Calendar Chart beside the Title "Deadlines Calendar" where Red for High and Yellow for Low
+	- Urgent Records Sidebar Tab consider the Done as also a Urgent, make it not counted as also Urgent
+- Side Bar Remove Procurement Dropdown rather Direct Add Procurement, Procurement Records, Progress Tracking
+- Edit Pallete on Switch Theme Adaptation(Tracking and Process Flow Guide Pages and other Buttons on other pages)
+- Include the Processing in the Dropdown menu of Edit Modal on part of dropdown for In Storage and Archived in Records Page
+- Other Documents(Add PR Number Input but Optional if blank generate an Other Document ID)
+- for Direct Box, Optional Folder per Document. also Direct Drawer>Cabinet, Optional Folder per Document
+- Unencrypt all Supplier Names per Records or Include to the List of Supplier Records all the Registered Record's Supplier per Records on Database Directly
+- Include All Details to be exported in CSV, and make a Formatted CSV File Extraction
+- Records Page Date Filter
+- Add other Peripherals like AI, Manual Guide, Profile Pics, Security and more:
+	- Export Include Supplier
+	- Manual Guide Step by Step Process(with images)
+	- AI Chatbot into floatable activation Button
+	- Settings Alarm Modification
+	- Regular Bidding Checklist(Add an Unlimited Auto Generate Input cause some part of Checklist wasnt included on the default list) and Remove this process on Add SVP Documents
+	- Profile and User Management
+- Make the Filters in Records page which is Status: Select status Borrowed Archived. Add Processing which Filters Records based on this Select Component in a row of record:
+<SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+       <SelectItem value="active" className="text-orange-400 focus:text-orange-400 text-xs">Borrowed</SelectItem>
+       <SelectItem value="in-progress" className="text-blue-400 focus:text-blue-400 text-xs">In Progress</SelectItem>
+       <SelectItem value="archived" className="text-slate-300 focus:text-white text-xs">In Storage</SelectItem>
+</SelectContent>
+but instead of In Progress, change it into 'Processing'
+
+
+
+
+Remove the 3. Documents Tab on the Add Procurement Page specifically for Adding or Registering an SVP Record
+
+
+
+
+
+- Rate Limiting
+- Load Balancing
+
+- Redo Process Flow Details
+- Transfer/Reregister Other Documents from Folder to Other Documents
+- Journal
+
+
+
+
+
+- Edit Pallete on Switch Theme Adaptation(Tracking and Process Flow Guide Pages and other Buttons on other pages)
+- Manual Guide(with Redirections)
+- Checklist
+- Profile and User Management
+- Other Documents PR Number(Optional)
+- Export Include Supplier
+- Manual Guide Step by Step Process(with images)
+- AI Chatbot into floatable activation Button
+- Settings Alarm Modification
+- Remove other Redundancy
+
+
+
+______________________________________________________________________________________________________
+
+
+
+
+- Move Storage Limit Indication below the Side bar
+- Transfer Account on the Top Navigation
+- Add Calendar Reflecting the Deadlines
+- Notification Deadline List
+- Add Profile Name Pic on Profile Settings
+- Add Time(12 Hour Format) Above(Notify if Starts Working Time(8:00 AM), Lunch Time(12:00 AM), Pack Up Time(6:00 PM))
+- Add Other Documents Entity and Registration 
+- Add Box -> File Storage Format Directly
+- Display chart/graph for Progress Monitoring in Dashboard Page
+- Unencrypt Supplier Names for each procurements to reflect on Awarded or Failed for Supplier list Page and make it in Leaderboard Layout based on how many awarded procurement
+- Redo UI into more optimizing performance based on this Lighthouse Result and redo the Dashboard UIs based on this image reference including Monthly Trends per Mode of Procurements like Shopping, SVP, and Regular Bidding
+- Viewable Procurements for each Divisions as End user in Supplier List Page
+
+
+
+- Viewable Procurements for each Divisions as End user in Divisions List Page
+- Make the Progress Monitoring Chart into all like processes of either SVP or Regular Bidding
+- Include the Calendar directly at the Charts and Graphs area in Dashboard
