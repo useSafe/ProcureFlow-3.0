@@ -54,13 +54,13 @@ const SVP_PHASES: Phase[] = [
 
 // Phase circle color based on completion
 const getPhaseColor = (completed: boolean, isCurrent: boolean, status: string) => {
-    if (!completed) return { circle: 'bg-slate-800 border-slate-700', icon: 'text-slate-600', connector: 'bg-slate-700' };
+    if (!completed) return { circle: 'bg-slate-800 border-border', icon: 'text-slate-600', connector: 'bg-slate-700' };
 
     // Use pure colors for active phases
     if (status === 'Completed') {
         return { circle: 'bg-green-500/20 border-green-500', icon: 'text-green-400', connector: 'bg-green-500/60' };
     }
-    if (status === 'In Progress') {
+    if (status === 'Processing') {
         return {
             circle: isCurrent
                 ? 'bg-yellow-400/30 border-yellow-400 ring-4 ring-yellow-400/20'
@@ -118,15 +118,15 @@ const PhasePipeline = ({ procurement }: { procurement: Procurement }) => {
                             <div className={`mt-2 text-center transition-opacity flex flex-col items-center
                                 ${completed || isCurrent ? 'opacity-100' : 'opacity-60 grayscale group-hover:opacity-100 group-hover:grayscale-0'}
                             `}>
-                                <span className={`text-[8px] font-bold uppercase tracking-wider mb-0.5 ${completed ? 'text-slate-300' : 'text-slate-500'}`}>
+                                <span className={`text-[8px] font-bold uppercase tracking-wider mb-0.5 ${completed ? 'text-muted-foreground' : 'text-muted-foreground'}`}>
                                     {phase.shortLabel}
                                 </span>
                                 {dateVal && (() => {
                                     try {
                                         const d = new Date(dateVal);
-                                        if (isNaN(d.getTime())) return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{dateVal}</span>;
-                                        return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{format(d, 'MMM d')}</span>;
-                                    } catch { return <span className="text-[8px] font-mono text-slate-400 bg-slate-800/50 px-1 rounded">{dateVal}</span>; }
+                                        if (isNaN(d.getTime())) return <span className="text-[8px] font-mono text-muted-foreground bg-slate-800/50 px-1 rounded">{dateVal}</span>;
+                                        return <span className="text-[8px] font-mono text-muted-foreground bg-slate-800/50 px-1 rounded">{format(d, 'MMM d')}</span>;
+                                    } catch { return <span className="text-[8px] font-mono text-muted-foreground bg-slate-800/50 px-1 rounded">{dateVal}</span>; }
                                 })()}
                             </div>
                         </div>
@@ -190,6 +190,7 @@ const VisualAllocation: React.FC = () => {
         });
     // Legacy support or direct files in box (optional, but hierarchy is Box->Folder->File now)
     const getFilesForBox = (boxId: string) => procurements.filter(p => p.boxId === boxId && !p.folderId).sort((a, b) => (a.prNumber || '').localeCompare(b.prNumber || '', undefined, { numeric: true }));
+    const getFilesForCabinet = (cabinetId: string) => procurements.filter(p => p.cabinetId === cabinetId && !p.folderId).sort((a, b) => (a.prNumber || '').localeCompare(b.prNumber || '', undefined, { numeric: true }));
 
     // Helpers for Breadcrumbs
     const currentShelf = shelves.find(s => s.id === selectedShelfId);
@@ -246,7 +247,7 @@ const VisualAllocation: React.FC = () => {
     return (
         <div className="space-y-6 fade-in animate-in duration-500">
             {/* Header & Breadcrumbs */}
-            <div className="flex items-center gap-2 text-sm text-slate-400 mb-4 font-mono">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 font-mono">
                 <Button variant="ghost" className="p-0 h-auto hover:bg-transparent hover:text-white" onClick={() => { setViewMode('shelves'); setSelectedShelfId(null); setSelectedCabinetId(null); setSelectedFolderId(null); setSelectedBoxId(null); }}>
                     STORAGE
                 </Button>
@@ -298,7 +299,7 @@ const VisualAllocation: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex-1">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2">Visual Allocation</h1>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-muted-foreground text-sm">
                         {viewMode === 'shelves' && 'Select a Shelf to view its contents.'}
                         {viewMode === 'cabinets' && `Viewing Cabinets in Shelf ${currentShelf?.name}`}
                         {viewMode === 'folders' && `Viewing Folders in Cabinet ${currentCabinet?.name}`}
@@ -311,12 +312,12 @@ const VisualAllocation: React.FC = () => {
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Visual Toggle between Shelf and Box Storage */}
                     {!selectedShelfId && !selectedBoxId && (
-                        <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
+                        <div className="flex bg-card p-1 rounded-lg border border-border">
                             <Button
                                 variant={viewMode === 'shelves' ? 'secondary' : 'ghost'}
                                 size="sm"
                                 onClick={() => { setViewMode('shelves'); setSelectedBoxId(null); }}
-                                className={viewMode === 'shelves' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+                                className={viewMode === 'shelves' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-muted-foreground hover:text-white'}
                             >
                                 <Grid className="h-4 w-4 mr-2" />
                                 Shelf Storage
@@ -325,7 +326,7 @@ const VisualAllocation: React.FC = () => {
                                 variant={viewMode === 'boxes' ? 'secondary' : 'ghost'}
                                 size="sm"
                                 onClick={() => { setViewMode('boxes'); setSelectedShelfId(null); setSelectedCabinetId(null); setSelectedFolderId(null); }}
-                                className={viewMode === 'boxes' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-400 hover:text-white'}
+                                className={viewMode === 'boxes' ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-muted-foreground hover:text-white'}
                             >
                                 <Archive className="h-4 w-4 mr-2" />
                                 Box Storage
@@ -334,14 +335,14 @@ const VisualAllocation: React.FC = () => {
                     )}
 
                     {(viewMode !== 'shelves' && viewMode !== 'boxes') && (
-                        <Button variant="outline" onClick={goBack} className="gap-2 bg-slate-800 border-slate-700 text-white hover:bg-slate-700">
+                        <Button variant="outline" onClick={goBack} className="gap-2 bg-slate-800 border-border text-white hover:bg-slate-700">
                             <ArrowLeft className="h-4 w-4" /> Up One Level
                         </Button>
                     )}
                 </div>
             </div>
 
-            <div className="bg-[#0f172a] p-4 sm:p-6 lg:p-8 rounded-xl border border-slate-800 min-h-[60vh] shadow-inner">
+            <div className="bg-background p-4 sm:p-6 lg:p-8 rounded-xl border border-border min-h-[60vh] shadow-inner">
 
                 {/* SHELVES VIEW (Racks) */}
                 {viewMode === 'shelves' && (
@@ -350,7 +351,7 @@ const VisualAllocation: React.FC = () => {
                             <div
                                 key={shelf.id}
                                 onClick={() => handleSelectShelf(shelf.id)}
-                                className="relative bg-[#1e293b] border-2 border-slate-700 rounded-lg p-0 cursor-pointer group hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-900/20"
+                                className="relative bg-card border-2 border-border rounded-lg p-0 cursor-pointer group hover:border-blue-500 transition-all hover:shadow-xl hover:shadow-blue-900/20"
                             >
                                 {/* Rack Top */}
                                 <div className="absolute top-0 left-0 right-0 h-3 bg-slate-600 rounded-t-md" />
@@ -366,12 +367,12 @@ const VisualAllocation: React.FC = () => {
                                         <div className="h-1 bg-slate-500 w-full rounded-full" />
                                     </div>
 
-                                    <div className="mt-4 bg-slate-800/80 backdrop-blur-sm p-3 rounded border border-slate-600">
+                                    <div className="mt-4 bg-slate-800/80 backdrop-blur-sm p-3 rounded border border-border">
                                         <div className="flex justify-between items-center mb-1">
                                             <span className="font-bold text-white text-lg">{shelf.name}</span>
                                             <span className="text-xs font-mono bg-blue-600 px-1.5 py-0.5 rounded text-white">{shelf.code}</span>
                                         </div>
-                                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                                        <div className="text-xs text-muted-foreground flex items-center gap-1">
                                             <Package className="h-3 w-3" />
                                             {getCabinetsForShelf(shelf.id).length} Cabinets
                                         </div>
@@ -383,7 +384,7 @@ const VisualAllocation: React.FC = () => {
                             </div>
                         ))}
                         {shelves.length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <Layers className="h-16 w-16 mb-4 opacity-20" />
                                 <p>No shelves found.</p>
                             </div>
@@ -398,7 +399,7 @@ const VisualAllocation: React.FC = () => {
                             <div
                                 key={cabinet.id}
                                 onClick={() => handleSelectCabinet(cabinet.id)}
-                                className="bg-[#334155] border-t border-b-[6px] border-x border-slate-700 border-b-slate-900 rounded-md p-6 relative shadow-lg hover:bg-[#475569] transition-all cursor-pointer group"
+                                className="bg-[#334155] border-t border-b-[6px] border-x border-border border-b-slate-900 rounded-md p-6 relative shadow-lg hover:bg-[#475569] transition-all cursor-pointer group"
                             >
                                 {/* Metal Handle */}
                                 <div className="w-1/3 h-3 bg-gradient-to-b from-slate-400 to-slate-600 mx-auto rounded-full mb-6 shadow-sm group-hover:scale-105 transition-transform" />
@@ -409,13 +410,13 @@ const VisualAllocation: React.FC = () => {
                                 </div>
 
                                 <div className="text-center">
-                                    <p className="text-slate-200 font-medium truncate">{cabinet.name}</p>
-                                    <p className="text-xs text-slate-400 mt-1">{getFoldersForCabinet(cabinet.id).length} Folders</p>
+                                    <p className="text-foreground font-medium truncate">{cabinet.name}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">{getFoldersForCabinet(cabinet.id).length} Folders</p>
                                 </div>
                             </div>
                         ))}
                         {getCabinetsForShelf(selectedShelfId!).length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <Package className="h-16 w-16 mb-4 opacity-20" />
                                 <p>No cabinets in this shelf.</p>
                             </div>
@@ -439,25 +440,47 @@ const VisualAllocation: React.FC = () => {
                                 />
                                 {/* Folder Body */}
                                 <div
-                                    className="bg-slate-800 border-t-4 p-4 rounded-b-lg rounded-tr-lg shadow-md h-32 flex flex-col justify-between hover:shadow-lg transition-all border-slate-700"
+                                    className="bg-slate-800 border-t-4 p-4 rounded-b-lg rounded-tr-lg shadow-md h-32 flex flex-col justify-between hover:shadow-lg transition-all border-border"
                                     style={{ borderTopColor: folder.color || '#fbbf24' }}
                                 >
                                     <div>
                                         <h3 className="font-bold text-white truncate text-sm" title={folder.name}>{folder.name}</h3>
-                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1 rounded">{folder.code}</span>
+                                        <span className="text-[10px] font-mono text-muted-foreground bg-slate-900 px-1 rounded">{folder.code}</span>
                                     </div>
 
                                     <div className="flex justify-between items-end">
                                         <FolderIcon className="h-8 w-8 text-slate-700" />
-                                        <span className="text-xs font-medium text-slate-300">{getFilesForFolder(folder.id).length} Files</span>
+                                        <span className="text-xs font-medium text-muted-foreground">{getFilesForFolder(folder.id).length} Files</span>
                                     </div>
                                 </div>
                             </div>
                         ))}
-                        {getFoldersForCabinet(selectedCabinetId!).length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                        {/* Direct Files in Cabinet */}
+                        {getFilesForCabinet(selectedCabinetId!).map(file => (
+                            <div
+                                key={file.id}
+                                onClick={() => handleSelectFile(file)}
+                                className="bg-card border border-border p-0 rounded-sm cursor-pointer hover:border-blue-400 hover:-translate-y-1 transition-all group shadow-sm mt-4"
+                            >
+                                <div className="h-2 bg-blue-500/20 w-full" />
+                                <div className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <FileText className="h-6 w-6 text-muted-foreground group-hover:text-blue-400" />
+                                        <div className={`w-2 h-2 rounded-full ${file.status === 'active' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                    </div>
+                                    <h4 className="text-blue-400 font-mono text-xs font-bold mb-1">{file.prNumber}</h4>
+                                    <p className="text-muted-foreground text-sm line-clamp-2 leading-tight h-10">{file.description}</p>
+                                    <div className="mt-4 pt-3 border-t border-border flex justify-between items-center text-xs text-muted-foreground">
+                                        <span>{file.dateAdded ? format(new Date(file.dateAdded), 'MMM d') : ''}</span>
+                                        {file.stackNumber && <span className="font-mono">↕{file.stackNumber}</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {getFoldersForCabinet(selectedCabinetId!).length === 0 && getFilesForCabinet(selectedCabinetId!).length === 0 && (
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <FolderIcon className="h-16 w-16 mb-4 opacity-20" />
-                                <p>No folders in this cabinet.</p>
+                                <p>No folders or files in this cabinet.</p>
                             </div>
                         )}
                     </div>
@@ -470,18 +493,18 @@ const VisualAllocation: React.FC = () => {
                             <div
                                 key={file.id}
                                 onClick={() => handleSelectFile(file)}
-                                className="bg-[#1e293b] border border-slate-700 p-0 rounded-sm cursor-pointer hover:border-blue-400 hover:-translate-y-1 transition-all group shadow-sm"
+                                className="bg-card border border-border p-0 rounded-sm cursor-pointer hover:border-blue-400 hover:-translate-y-1 transition-all group shadow-sm"
                             >
                                 <div className="h-2 bg-blue-500/20 w-full" />
                                 <div className="p-4">
                                     <div className="flex justify-between items-start mb-2">
-                                        <FileText className="h-6 w-6 text-slate-500 group-hover:text-blue-400" />
+                                        <FileText className="h-6 w-6 text-muted-foreground group-hover:text-blue-400" />
                                         <div className={`w-2 h-2 rounded-full ${file.status === 'active' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
                                     </div>
                                     <h4 className="text-blue-400 font-mono text-xs font-bold mb-1">{file.prNumber}</h4>
-                                    <p className="text-slate-300 text-sm line-clamp-2 leading-tight h-10">{file.description}</p>
+                                    <p className="text-muted-foreground text-sm line-clamp-2 leading-tight h-10">{file.description}</p>
 
-                                    <div className="mt-4 pt-3 border-t border-slate-700 flex justify-between items-center text-xs text-slate-500">
+                                    <div className="mt-4 pt-3 border-t border-border flex justify-between items-center text-xs text-muted-foreground">
                                         <span>{format(new Date(file.dateAdded), 'MMM d')}</span>
                                         {file.stackNumber && <span className="font-mono">↕{file.stackNumber}</span>}
                                     </div>
@@ -489,7 +512,7 @@ const VisualAllocation: React.FC = () => {
                             </div>
                         ))}
                         {getFilesForFolder(selectedFolderId!).length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <FileText className="h-16 w-16 mb-4 opacity-20" />
                                 <p>No files in this folder.</p>
                             </div>
@@ -504,33 +527,33 @@ const VisualAllocation: React.FC = () => {
                             <div
                                 key={box.id}
                                 onClick={() => handleSelectBox(box.id)}
-                                className="relative bg-[#0f172a] rounded-lg cursor-pointer group hover:-translate-y-1 transition-all duration-300"
+                                className="relative bg-background rounded-lg cursor-pointer group hover:-translate-y-1 transition-all duration-300"
                             >
                                 {/* Box Lid (Top) */}
-                                <div className="h-4 bg-[#1e293b] rounded-t-lg border-x border-t border-slate-600 relative overflow-hidden group-hover:bg-[#2e3b52] transition-colors">
+                                <div className="h-4 bg-card rounded-t-lg border-x border-t border-border relative overflow-hidden group-hover:bg-[#2e3b52] transition-colors">
                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-1 bg-slate-700 rounded-full" />
                                 </div>
 
                                 {/* Box Body (Front) */}
-                                <div className="bg-[#1e293b] p-6 rounded-b-lg border-x border-b border-slate-700 shadow-lg relative group-hover:border-blue-500/50 transition-colors">
+                                <div className="bg-card p-6 rounded-b-lg border-x border-b border-border shadow-lg relative group-hover:border-blue-500/50 transition-colors">
                                     {/* Label Area */}
-                                    <div className="absolute top-4 left-4 right-4 h-12 bg-slate-800/50 rounded border border-slate-700/50 flex items-center justify-between px-3">
+                                    <div className="absolute top-4 left-4 right-4 h-12 bg-slate-800/50 rounded border border-border/50 flex items-center justify-between px-3">
                                         <div className="bg-blue-600 px-2 py-0.5 rounded textxs font-mono text-white font-bold shadow-sm">
                                             {box.code}
                                         </div>
-                                        <span className="text-xs text-slate-400 font-mono">
+                                        <span className="text-xs text-muted-foreground font-mono">
                                             {getFoldersForBox(box.id).length} Folders
                                         </span>
                                     </div>
 
                                     <div className="mt-12 pt-2">
                                         <h3 className="text-white font-bold text-lg mb-1 truncate">{box.name}</h3>
-                                        <p className="text-slate-400 text-sm line-clamp-2 min-h-[2.5em] mb-2">{box.description}</p>
+                                        <p className="text-muted-foreground text-sm line-clamp-2 min-h-[2.5em] mb-2">{box.description}</p>
 
                                         {/* Folders List inside Box */}
-                                        <div className="space-y-1 border-t border-slate-700/50 pt-2">
+                                        <div className="space-y-1 border-t border-border/50 pt-2">
                                             {getFoldersForBox(box.id).slice(0, 3).map(f => (
-                                                <div key={f.id} className="text-[10px] text-slate-500 flex items-center gap-1.5 truncate">
+                                                <div key={f.id} className="text-[10px] text-muted-foreground flex items-center gap-1.5 truncate">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50"></div>
                                                     <span className="font-mono text-blue-400/70">{f.code}</span>
                                                     <span className="truncate">{f.name}</span>
@@ -554,7 +577,7 @@ const VisualAllocation: React.FC = () => {
                             </div>
                         ))}
                         {boxes.length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <Archive className="h-16 w-16 mb-4 opacity-20" />
                                 <p>No boxes found.</p>
                             </div>
@@ -578,25 +601,47 @@ const VisualAllocation: React.FC = () => {
                                 />
                                 {/* Folder Body */}
                                 <div
-                                    className="bg-slate-800 border-t-4 p-4 rounded-b-lg rounded-tr-lg shadow-md h-32 flex flex-col justify-between hover:shadow-lg transition-all border-slate-700"
+                                    className="bg-slate-800 border-t-4 p-4 rounded-b-lg rounded-tr-lg shadow-md h-32 flex flex-col justify-between hover:shadow-lg transition-all border-border"
                                     style={{ borderTopColor: folder.color || '#fbbf24' }}
                                 >
                                     <div>
                                         <h3 className="font-bold text-white truncate text-sm" title={folder.name}>{folder.name}</h3>
-                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1 rounded">{folder.code}</span>
+                                        <span className="text-[10px] font-mono text-muted-foreground bg-slate-900 px-1 rounded">{folder.code}</span>
                                     </div>
 
                                     <div className="flex justify-between items-end">
                                         <FolderIcon className="h-8 w-8 text-slate-700" />
-                                        <span className="text-xs font-medium text-slate-300">{getFilesForFolder(folder.id).length} Files</span>
+                                        <span className="text-xs font-medium text-muted-foreground">{getFilesForFolder(folder.id).length} Files</span>
                                     </div>
                                 </div>
                             </div>
                         ))}
-                        {getFoldersForBox(selectedBoxId!).length === 0 && (
-                            <div className="col-span-full flex flex-col items-center justify-center text-slate-500 py-20">
+                        {/* Direct Files in Box */}
+                        {getFilesForBox(selectedBoxId!).map(file => (
+                            <div
+                                key={file.id}
+                                onClick={() => handleSelectFile(file)}
+                                className="bg-card border border-border p-0 rounded-sm cursor-pointer hover:border-blue-400 hover:-translate-y-1 transition-all group shadow-sm mt-4"
+                            >
+                                <div className="h-2 bg-blue-500/20 w-full" />
+                                <div className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <FileText className="h-6 w-6 text-muted-foreground group-hover:text-blue-400" />
+                                        <div className={`w-2 h-2 rounded-full ${file.status === 'active' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                                    </div>
+                                    <h4 className="text-blue-400 font-mono text-xs font-bold mb-1">{file.prNumber}</h4>
+                                    <p className="text-muted-foreground text-sm line-clamp-2 leading-tight h-10">{file.description}</p>
+                                    <div className="mt-4 pt-3 border-t border-border flex justify-between items-center text-xs text-muted-foreground">
+                                        <span>{file.dateAdded ? format(new Date(file.dateAdded), 'MMM d') : ''}</span>
+                                        {file.stackNumber && <span className="font-mono">↕{file.stackNumber}</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                        {getFoldersForBox(selectedBoxId!).length === 0 && getFilesForBox(selectedBoxId!).length === 0 && (
+                            <div className="col-span-full flex flex-col items-center justify-center text-muted-foreground py-20">
                                 <FolderIcon className="h-16 w-16 mb-4 opacity-20" />
-                                <p>No folders in this box.</p>
+                                <p>No folders or files in this box.</p>
                             </div>
                         )}
                     </div>
@@ -606,13 +651,13 @@ const VisualAllocation: React.FC = () => {
 
             {/* File Details Modal */}
             <Dialog open={!!selectedFile} onOpenChange={(open) => !open && setSelectedFile(null)}>
-                <DialogContent className="bg-[#0f172a] border-slate-800 text-white max-w-3xl">
+                <DialogContent className="bg-background border-border text-foreground max-w-3xl">
                     <DialogHeader>
                         <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                             <FileText className="h-6 w-6 text-blue-500" />
                             {selectedFile?.prNumber}
                         </DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             File Details
                         </DialogDescription>
                     </DialogHeader>
@@ -621,14 +666,14 @@ const VisualAllocation: React.FC = () => {
                         <div className="space-y-6 py-4 animate-in slide-in-from-bottom-5 fade-in duration-300 max-h-[70vh] overflow-y-auto pr-2">
                             {/* Summary Cards */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">Status</h3>
+                                <div className="p-3 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase">Status</h3>
                                     <p className={`font-medium ${selectedFile.status === 'active' ? 'text-amber-500' : 'text-emerald-500'}`}>
                                         {selectedFile.status === 'active' ? 'Borrowed' : 'Available'}
                                     </p>
                                 </div>
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">Progress</h3>
+                                <div className="p-3 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase">Progress</h3>
                                     <p className={`font-medium ${selectedFile.procurementStatus === 'Completed' ? 'text-emerald-400' :
                                         (selectedFile.procurementStatus === 'Failure' || selectedFile.procurementStatus === 'Cancelled') ? 'text-red-400' :
                                             'text-yellow-400'
@@ -636,18 +681,18 @@ const VisualAllocation: React.FC = () => {
                                         {selectedFile.procurementStatus || 'Not yet Acted'}
                                     </p>
                                 </div>
-                                <div className="col-span-2 p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-2 uppercase">Procurement Progress</h3>
-                                    <div className="bg-slate-950/50 rounded-lg p-2 border border-slate-800/50">
+                                <div className="col-span-2 p-3 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase">Procurement Progress</h3>
+                                    <div className="bg-slate-950/50 rounded-lg p-2 border border-border/50">
                                         <PhasePipeline procurement={selectedFile} />
                                     </div>
                                 </div>
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">End User</h3>
+                                <div className="p-3 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase">End User</h3>
                                     <p className="text-white">{selectedFile.division || 'N/A'}</p>
                                 </div>
-                                <div className="p-3 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-xs font-medium text-slate-500 mb-1 uppercase">Stack Number</h3>
+                                <div className="p-3 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-xs font-medium text-muted-foreground mb-1 uppercase">Stack Number</h3>
                                     <p className="text-white font-mono text-lg font-bold">
                                         {selectedFile.status === 'archived' && selectedFile.stackNumber
                                             ? `#${selectedFile.stackNumber}`
@@ -658,59 +703,59 @@ const VisualAllocation: React.FC = () => {
 
                             {/* Main Info */}
                             <div className="space-y-4">
-                                <div className="p-4 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                                <div className="p-4 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
                                         <Grid className="h-4 w-4 text-blue-500" />
                                         Project Details
                                     </h3>
                                     <div className="grid grid-cols-2 gap-4 mb-4">
                                         <div className="col-span-2">
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Project Title</span>
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Project Title</span>
                                             <span className="text-sm text-white font-medium">{selectedFile.projectName || 'N/A'}</span>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Procurement Type</span>
-                                            <span className="text-sm text-white font-medium bg-slate-800 px-2 py-0.5 rounded border border-slate-700">{selectedFile.procurementType || 'N/A'}</span>
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Procurement Type</span>
+                                            <span className="text-sm text-white font-medium bg-slate-800 px-2 py-0.5 rounded border border-border">{selectedFile.procurementType || 'N/A'}</span>
                                         </div>
                                         <div className="col-span-2 sm:col-span-1">
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Supplier Name</span>
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Supplier Name</span>
                                             <span className="text-sm text-white font-medium">{selectedFile.supplier || 'N/A'}</span>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">ABC</span>
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">ABC</span>
                                             <span className="text-sm text-emerald-400 font-mono font-bold bg-emerald-950/30 px-2 py-0.5 rounded border border-emerald-900/50">
                                                 {selectedFile.abc ? `₱${selectedFile.abc.toLocaleString()}` : 'N/A'}
                                             </span>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Bid Amount</span>
+                                            <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-1">Bid Amount</span>
                                             <span className="text-sm text-amber-400 font-mono font-bold bg-amber-950/30 px-2 py-0.5 rounded border border-amber-900/50">
                                                 {selectedFile.bidAmount ? `₱${selectedFile.bidAmount.toLocaleString()}` : 'N/A'}
                                             </span>
                                         </div>
                                     </div>
 
-                                    <h3 className="text-[10px] uppercase font-bold text-slate-500 mt-4 mb-2 border-t border-slate-800 pt-3">Description / Remarks</h3>
+                                    <h3 className="text-[10px] uppercase font-bold text-muted-foreground mt-4 mb-2 border-t border-border pt-3">Description / Remarks</h3>
                                     <p className="text-white text-sm leading-relaxed">{selectedFile.description || selectedFile.remarks || 'N/A'}</p>
 
                                     {selectedFile.notes && (
                                         <>
-                                            <h3 className="text-[10px] uppercase font-bold text-slate-500 mt-4 mb-2 border-t border-slate-800 pt-3">Notes</h3>
+                                            <h3 className="text-[10px] uppercase font-bold text-muted-foreground mt-4 mb-2 border-t border-border pt-3">Notes</h3>
                                             <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">{selectedFile.notes}</p>
                                         </>
                                     )}
                                 </div>
 
-                                <div className="p-4 bg-slate-900 rounded-lg border border-slate-800">
-                                    <h3 className="text-sm font-medium text-slate-500 mb-2">Location Path</h3>
+                                <div className="p-4 bg-slate-900 rounded-lg border border-border">
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Location Path</h3>
                                     {selectedFile.boxId ? (
                                         <div className="flex items-center gap-2 text-sm text-white">
                                             <Package className="h-4 w-4 text-blue-400" />
                                             <span>Box: {boxes.find(b => b.id === selectedFile.boxId)?.name || 'Unknown Box'}</span>
-                                            <span className="text-slate-500 font-mono text-xs">({boxes.find(b => b.id === selectedFile.boxId)?.code})</span>
+                                            <span className="text-muted-foreground font-mono text-xs">({boxes.find(b => b.id === selectedFile.boxId)?.code})</span>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center gap-2 text-sm text-slate-300">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                             <span>{currentShelf?.name}</span>
                                             <ChevronRight className="h-3 w-3" />
                                             <span>{currentCabinet?.name}</span>
@@ -728,20 +773,20 @@ const VisualAllocation: React.FC = () => {
                                     {selectedFile.borrowedBy ? (
                                         <div className="grid grid-cols-2 gap-4 text-xs text-white">
                                             <div>
-                                                <span className="text-slate-500 block">Borrower:</span>
+                                                <span className="text-muted-foreground block">Borrower:</span>
                                                 {selectedFile.borrowedBy}
                                             </div>
                                             <div>
-                                                <span className="text-slate-500 block">Borrower Division:</span>
+                                                <span className="text-muted-foreground block">Borrower Division:</span>
                                                 {selectedFile.borrowerDivision || 'N/A'}
                                             </div>
                                             <div>
-                                                <span className="text-slate-500 block">Date Borrowed:</span>
+                                                <span className="text-muted-foreground block">Date Borrowed:</span>
                                                 {selectedFile.borrowedDate ? format(new Date(selectedFile.borrowedDate), 'MMM d, yyyy') : 'N/A'}
                                             </div>
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-slate-500 italic">No borrower details recorded.</p>
+                                        <p className="text-xs text-muted-foreground italic">No borrower details recorded.</p>
                                     )}
                                 </div>
                             )}
@@ -753,31 +798,31 @@ const VisualAllocation: React.FC = () => {
                                     <div className="grid grid-cols-2 gap-4 text-xs text-white">
                                         {selectedFile.borrowedBy && (
                                             <div>
-                                                <span className="text-slate-500 block">Borrowed By:</span>
+                                                <span className="text-muted-foreground block">Borrowed By:</span>
                                                 {selectedFile.borrowedBy}
                                             </div>
                                         )}
                                         {selectedFile.borrowerDivision && (
                                             <div>
-                                                <span className="text-slate-500 block">Borrower Division:</span>
+                                                <span className="text-muted-foreground block">Borrower Division:</span>
                                                 {selectedFile.borrowerDivision}
                                             </div>
                                         )}
                                         {selectedFile.borrowedDate && (
                                             <div>
-                                                <span className="text-slate-500 block">Date Borrowed:</span>
+                                                <span className="text-muted-foreground block">Date Borrowed:</span>
                                                 {format(new Date(selectedFile.borrowedDate), 'MMM d, yyyy')}
                                             </div>
                                         )}
                                         {selectedFile.returnedBy && (
                                             <div>
-                                                <span className="text-slate-500 block">Returned By:</span>
+                                                <span className="text-muted-foreground block">Returned By:</span>
                                                 {selectedFile.returnedBy}
                                             </div>
                                         )}
                                         {selectedFile.returnDate && (
                                             <div>
-                                                <span className="text-slate-500 block">Date Returned:</span>
+                                                <span className="text-muted-foreground block">Date Returned:</span>
                                                 {format(new Date(selectedFile.returnDate), 'MMM d, yyyy')}
                                             </div>
                                         )}
@@ -788,8 +833,8 @@ const VisualAllocation: React.FC = () => {
                             {/* Checklist Summary */}
                             {selectedFile.checklist && Object.keys(selectedFile.checklist).length > 0 && (
                                 <div>
-                                    <h3 className="text-sm font-medium text-slate-400 mb-2">Documents</h3>
-                                    <div className="grid grid-cols-1 gap-1 text-xs text-slate-300 bg-slate-900 p-3 rounded-lg border border-slate-800 max-h-[150px] overflow-y-auto">
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Documents</h3>
+                                    <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground bg-slate-900 p-3 rounded-lg border border-border max-h-[150px] overflow-y-auto">
                                         {CHECKLIST_ITEMS.map((item) => {
                                             if (selectedFile.checklist?.[item.key as keyof typeof selectedFile.checklist]) {
                                                 return (
@@ -806,7 +851,7 @@ const VisualAllocation: React.FC = () => {
                             )}
 
                             {/* Metadata Footer */}
-                            <div className="grid grid-cols-2 gap-4 text-xs text-slate-500 pt-2 border-t border-slate-800">
+                            <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground pt-2 border-t border-border">
                                 <div>
                                     <span className="block font-semibold mb-1">Created By</span>
                                     <span>{selectedFile.createdByName || 'Unknown'}</span>

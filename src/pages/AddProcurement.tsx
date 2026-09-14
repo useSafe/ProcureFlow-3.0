@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ import {
 import { constructPrNumber, getNextPrSequence, formatSequence } from '@/lib/pr-number-utils';
 import { formatNumberWithCommas, removeCommas, handleNumberInput, getDisplayValue } from '@/lib/number-utils';
 
-// ─── localStorage helpers ────────────────────────────────────────────────────
+// --- localStorage helpers ----------------------------------------------------
 const getStorageKey = (userEmail: string) => `procureflow_add_form_${userEmail}`;
 
 const loadDraft = (userEmail: string) => {
@@ -71,14 +71,14 @@ const checklistItems = CHECKLIST_ITEMS;
 
 const PROCUREMENT_PROCESS_STATUSES: ProcurementProcessStatus[] = [
     'Completed',
-    'In Progress',
+    'Processing',
     'Returned PR to EU',
     'Not yet Acted',
     'Failure',
     'Cancelled'
 ];
 
-type FormMode = 'SVP' | 'Regular';
+type FormMode = 'SVP' | 'Regular' | 'Other Documents';
 
 const AddProcurement: React.FC = () => {
     const navigate = useNavigate();
@@ -97,22 +97,23 @@ const AddProcurement: React.FC = () => {
     const [availableFolders, setAvailableFolders] = useState<Folder[]>([]);
     const [isFoldersLoading, setIsFoldersLoading] = useState(false);
 
-    // ── Load draft once on mount ───────────────────────────────────────────────
+    // -- Load draft once on mount -----------------------------------------------
     const draft = loadDraft(userEmail);
 
     // Form Mode
-    const [formMode, setFormMode] = useState<FormMode>(draft?.formMode || 'SVP');
+    const [formMode, setFormMode] = useState<FormMode>(draft?.formMode === 'Shopping' ? 'SVP' : (draft?.formMode || 'SVP'));
     const [activeTab, setActiveTab] = useState<'basic' | 'monitoring' | 'documents' | 'storage'>(draft?.activeTab || 'basic');
 
     // Common Fields
     const [projectName, setProjectName] = useState(draft?.projectName || '');
+    const [customDivision, setCustomDivision] = useState(draft?.customDivision || '');
     const [description, setDescription] = useState(draft?.description || '');
     const [status, setStatus] = useState<ProcurementStatus>(draft?.status || 'archived');
     const [procurementProcessStatus, setProcurementProcessStatus] = useState<ProcurementProcessStatus>(draft?.procurementProcessStatus || 'Not yet Acted');
     const [dateStatusUpdated, setDateStatusUpdated] = useState<Date | undefined>(
         draft?.dateStatusUpdated ? new Date(draft.dateStatusUpdated) : new Date()
     );
-    const [urgencyLevel, setUrgencyLevel] = useState<UrgencyLevel>(draft?.urgencyLevel || 'Medium');
+    const [urgencyLevel, setUrgencyLevel] = useState<UrgencyLevel>(draft?.urgencyLevel || 'None');
     const [deadline, setDeadline] = useState<Date | undefined>(
         draft?.deadline ? new Date(draft.deadline) : undefined
     );
@@ -145,6 +146,7 @@ const AddProcurement: React.FC = () => {
     const [prSequence, setPrSequence] = useState(draft?.prSequence || '001');
     const [isCheckingPr, setIsCheckingPr] = useState(false);
     const [prExists, setPrExists] = useState<boolean | null>(null);
+    const [otherDocId, setOtherDocId] = useState(draft?.otherDocId || '');
 
     // Tracks whether the user has manually edited the sequence field.
     // When true, automatic recalculation is suppressed so Firebase updates
@@ -160,6 +162,7 @@ const AddProcurement: React.FC = () => {
     const [shelfId, setShelfId] = useState(draft?.shelfId || '');
     const [folderId, setFolderId] = useState(draft?.folderId || '');
     const [boxId, setBoxId] = useState(draft?.boxId || '');
+    const [storageStatus, setStorageStatus] = useState<'Processing' | 'In Storage'>(draft?.storageStatus || 'Processing');
 
     // Folder Creation in Box
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -188,14 +191,25 @@ const AddProcurement: React.FC = () => {
     const [ntpDate, setNtpDate] = useState<string>(draft?.ntpDate || '');
     const [awardedToDate, setAwardedToDate] = useState<string>(draft?.awardedToDate || '');
 
+    // Monitoring Dates - Shopping specific
+    const [shoppingReceivedDate, setShoppingReceivedDate] = useState<string>(draft?.shoppingReceivedDate || '');
+    const [shoppingBudgetCertDate, setShoppingBudgetCertDate] = useState<string>(draft?.shoppingBudgetCertDate || '');
+    const [shoppingRfqDate, setShoppingRfqDate] = useState<string>(draft?.shoppingRfqDate || '');
+    const [shoppingCanvassDate, setShoppingCanvassDate] = useState<string>(draft?.shoppingCanvassDate || '');
+    const [shoppingAbstractDate, setShoppingAbstractDate] = useState<string>(draft?.shoppingAbstractDate || '');
+    const [shoppingPurchaseOrderDate, setShoppingPurchaseOrderDate] = useState<string>(draft?.shoppingPurchaseOrderDate || '');
+
     // Checklist State
     const [checklist, setChecklist] = useState<Record<string, boolean>>(draft?.checklist || {});
+    const [customChecklistItems, setCustomChecklistItems] = useState<{ key: string, label: string }[]>(draft?.customChecklistItems || []);
+    const [newCustomItem, setNewCustomItem] = useState('');
 
-    // ── Save draft to localStorage whenever any field changes ─────────────────
+    // -- Save draft to localStorage whenever any field changes -----------------
     useEffect(() => {
         saveDraft(userEmail, {
             formMode, activeTab,
-            projectName, description, status, procurementProcessStatus,
+            projectName, customDivision, description, status, procurementProcessStatus,
+            otherDocId,
             dateStatusUpdated: dateStatusUpdated?.toISOString(),
             urgencyLevel,
             deadline: deadline?.toISOString(),
@@ -218,15 +232,13 @@ const AddProcurement: React.FC = () => {
             bidEvaluationDate: bidEvaluationDate,
             postQualDate: postQualDate,
             postQualReportDate: postQualReportDate,
-            forwardedOapiDate: forwardedOapiDate,
-            noaDate: noaDate,
-            contractDate: contractDate,
-            ntpDate: ntpDate,
-            awardedToDate: awardedToDate,
-            checklist,
+            forwardedOapiDate, noaDate, contractDate, ntpDate, awardedToDate, checklist,
+            shoppingReceivedDate, shoppingBudgetCertDate, shoppingRfqDate,
+            shoppingCanvassDate, shoppingAbstractDate, shoppingPurchaseOrderDate,
+            storageStatus, customChecklistItems,
         });
     }, [
-        formMode, activeTab, projectName, description, status, procurementProcessStatus,
+        formMode, activeTab, projectName, customDivision, description, status, procurementProcessStatus, otherDocId,
         dateStatusUpdated, urgencyLevel, deadline, abc, bidAmount, supplier, staffIncharge,
         borrowerName, borrowingDivisionId, borrowedDate, dateAdded,
         prFormat, prDivisionId, prMonth, prYear, prSequence, selectedDivisionId,
@@ -234,7 +246,10 @@ const AddProcurement: React.FC = () => {
         receivedPrDate, prDeliberatedDate, publishedDate, rfqCanvassDate,
         rfqOpeningDate, bacResolutionDate, forwardedGsdDate, preBidDate,
         bidOpeningDate, bidEvaluationDate, postQualDate, postQualReportDate,
-        forwardedOapiDate, noaDate, contractDate, ntpDate, awardedToDate, checklist,
+        forwardedOapiDate, noaDate, contractDate, ntpDate, awardedToDate, checklist, customChecklistItems,
+        shoppingReceivedDate, shoppingBudgetCertDate, shoppingRfqDate,
+        shoppingCanvassDate, shoppingAbstractDate, shoppingPurchaseOrderDate,
+        storageStatus,
     ]);
 
     // Live Validation for Duplicate PR
@@ -262,18 +277,19 @@ const AddProcurement: React.FC = () => {
         return () => clearTimeout(timer);
     }, [prFormat, prDivisionId, prMonth, prYear, prSequence, divisions, procurements]);
 
-    // ── Clear Form handler ────────────────────────────────────────────────────
+    // -- Clear Form handler ----------------------------------------------------
     const handleClearForm = useCallback(() => {
         clearDraft(userEmail);
         // Reset all form state to defaults
         setFormMode('SVP');
         setActiveTab('basic');
         setProjectName('');
+        setCustomDivision('');
         setDescription('');
         setStatus('archived');
         setProcurementProcessStatus('Not yet Acted');
         setDateStatusUpdated(new Date());
-        setUrgencyLevel('Medium');
+        setUrgencyLevel('None');
         setDeadline(undefined);
         setAbc('');
         setBidAmount('');
@@ -313,7 +329,16 @@ const AddProcurement: React.FC = () => {
         setContractDate('');
         setNtpDate('');
         setAwardedToDate('');
+        setShoppingReceivedDate('');
+        setShoppingBudgetCertDate('');
+        setShoppingRfqDate('');
+        setShoppingCanvassDate('');
+        setShoppingAbstractDate('');
+        setShoppingPurchaseOrderDate('');
+        setStorageStatus('Processing');
         setChecklist({});
+        setCustomChecklistItems([]);
+        setNewCustomItem('');
         // Re-enable auto-sequence calculation on clear
         userEditedSequence.current = false;
         toast.success('Form cleared');
@@ -327,11 +352,9 @@ const AddProcurement: React.FC = () => {
     }, [prFormat, prDivisionId, prYear, prMonth]);
 
 
-    // Auto-generate Sequence based on PR format, Division (old only), and Year.
-    // The guard `userEditedSequence.current` prevents this effect from overwriting
-    // a value the user explicitly typed. It is reset when the structural fields
-    // (division / format / year / month) change, so the sequence auto-updates
-    // when those pivot fields change but NOT when Firebase pushes a new record.
+    // Auto-generate Sequence based on PR format, Division (old only), Year, and Month.
+    // FIX: New format now filters by BOTH year AND month (yearMonthStr) to avoid
+    // picking up sequence numbers from other months in the same year.
     useEffect(() => {
         // If the user manually edited the sequence, respect their choice.
         if (userEditedSequence.current) return;
@@ -362,11 +385,13 @@ const AddProcurement: React.FC = () => {
 
                 setPrSequence((maxSeq + 1).toString().padStart(3, '0'));
             } else {
-                // New format: YY-MMM-SEQ — no division needed
-                const yearStr = `${prYear}-`;
+                // New format: YYYY-MMM-SEQ — filter by BOTH year AND month
+                // FIX: was previously `${prYear}-` which matched all months of the year,
+                // causing the sequence to jump to the highest number across all months.
+                const yearMonthStr = `${prYear}-${prMonth}-`;
 
                 const matching = procurements.filter(p =>
-                    p.prNumber.startsWith(yearStr)
+                    p.prNumber.startsWith(yearMonthStr)
                 );
 
                 let maxSeq = 0;
@@ -501,88 +526,96 @@ const AddProcurement: React.FC = () => {
         e.preventDefault();
 
         // Validation
-        if (!projectName) {
-            toast.error('Project Title (Particulars) is required');
-            return;
-        }
-        // Validate PR Number construction
-        if (prFormat === 'old') {
-            if (!prDivisionId || !prMonth || !prYear || !prSequence) {
-                toast.error('Please complete all PR Number fields (Division, Month, Year, Sequence)');
+        if (formMode === 'Other Documents') {
+            if (!projectName || !customDivision || !prYear) {
+                toast.error('Title, Division, and Year are required');
                 return;
             }
         } else {
-            if (!prMonth || !prYear || !prSequence) {
-                toast.error('Please complete all PR Number fields (Month, Year, Sequence)');
+            if (!projectName) {
+                toast.error('Project Title (Particulars) is required');
                 return;
+            }
+            // Validate PR Number construction
+            if (prFormat === 'old') {
+                if (!prDivisionId || !prMonth || !prYear || !prSequence) {
+                    toast.error('Please complete all PR Number fields (Division, Month, Year, Sequence)');
+                    return;
+                }
+            } else {
+                if (!prMonth || !prYear || !prSequence) {
+                    toast.error('Please complete all PR Number fields (Month, Year, Sequence)');
+                    return;
+                }
             }
         }
 
-        // ── Load-Balancing: Fresh read from Firebase right before submit ──────
+        // -- Load-Balancing: Fresh read from Firebase right before submit ------
         // This prevents the race condition where two concurrent users both see
         // the same cached "next sequence" and submit duplicate PR numbers.
         let finalSequence = prSequence;
-        try {
-            const freshProcurements = await getProcurements();
-            const prDivisionAbbr = divisions.find(d => d.id === prDivisionId)?.abbreviation || '';
-
-            if (prFormat === 'old' && prDivisionAbbr) {
-                const yearStr = `-${prYear}-`;
-                const divStr = `${prDivisionAbbr}-`;
-                const matching = freshProcurements.filter(p =>
-                    p.prNumber.startsWith(divStr) && p.prNumber.includes(yearStr)
-                );
-                let maxSeq = 0;
-                matching.forEach(p => {
-                    const parts = p.prNumber.split('-');
-                    if (parts.length >= 4) {
-                        const seq = parseInt(parts[3]);
-                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-                    }
-                });
-                const freshNext = (maxSeq + 1).toString().padStart(3, '0');
-                // If the fresh max is higher than what the user sees, bump up
-                if (parseInt(freshNext) > parseInt(prSequence)) {
-                    finalSequence = freshNext;
-                    toast.info(`⚡ Sequence updated to ${freshNext} to avoid conflict with another user's record.`);
-                }
-            } else if (prFormat === 'new') {
-                const yearStr = `${prYear}-`;
-                const matching = freshProcurements.filter(p => p.prNumber.startsWith(yearStr));
-                let maxSeq = 0;
-                matching.forEach(p => {
-                    const parts = p.prNumber.split('-');
-                    if (parts.length >= 3) {
-                        const seq = parseInt(parts[2]);
-                        if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-                    }
-                });
-                const freshNext = (maxSeq + 1).toString().padStart(3, '0');
-                if (parseInt(freshNext) > parseInt(prSequence)) {
-                    finalSequence = freshNext;
-                    toast.info(`⚡ Sequence updated to ${freshNext} to avoid conflict with another user's record.`);
-                }
-            }
-        } catch (err) {
-            // If fresh read fails, fall back to cached value (still saves)
-            console.warn('Could not fetch fresh procurements for race-condition check:', err);
-        }
-
-        // Build the final PR number using the confirmed sequence
-        const prDivisionAbbrFinal = divisions.find(d => d.id === prDivisionId)?.abbreviation || 'XXX';
         let constructedPrNumber = '';
-        if (prFormat === 'old') {
-            constructedPrNumber = `${prDivisionAbbrFinal}-${prMonth}-${prYear.slice(-2)}-${finalSequence}`;
+
+        if (formMode !== 'Other Documents') {
+            try {
+                const freshProcurements = await getProcurements();
+                const prDivisionAbbr = divisions.find(d => d.id === prDivisionId)?.abbreviation || '';
+
+                if (prFormat === 'old' && prDivisionAbbr) {
+                    const yearStr = `-${prYear}-`;
+                    const divStr = `${prDivisionAbbr}-`;
+                    const matching = freshProcurements.filter(p =>
+                        p.prNumber.startsWith(divStr) && p.prNumber.includes(yearStr)
+                    );
+                    let maxSeq = 0;
+                    matching.forEach(p => {
+                        const parts = p.prNumber.split('-');
+                        if (parts.length >= 4) {
+                            const seq = parseInt(parts[3]);
+                            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                        }
+                    });
+                } else if (prFormat === 'new') {
+                    const yearMonthStr = `${prYear}-${prMonth}-`;
+                    const matching = freshProcurements.filter(p => p.prNumber.startsWith(yearMonthStr));
+                    let maxSeq = 0;
+                    matching.forEach(p => {
+                        const parts = p.prNumber.split('-');
+                        if (parts.length >= 3) {
+                            const seq = parseInt(parts[2]);
+                            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                        }
+                    });
+                    const freshNext = (maxSeq + 1).toString().padStart(3, '0');
+                    if (parseInt(freshNext) > parseInt(prSequence)) {
+                        finalSequence = freshNext;
+                        toast.info(`? Sequence updated to ${freshNext} to avoid conflict with another user's record.`);
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not fetch fresh procurements for race-condition check:', err);
+            }
+
+            const prDivisionAbbrFinal = divisions.find(d => d.id === prDivisionId)?.abbreviation || 'XXX';
+            if (prFormat === 'old') {
+                constructedPrNumber = `${prDivisionAbbrFinal}-${prMonth}-${prYear.slice(-2)}-${finalSequence}`;
+            } else {
+                constructedPrNumber = `${prYear}-${prMonth}-${finalSequence}`;
+            }
+
+            // Check for duplicate PR number (warning only, still saves)
+            const isDuplicate = procurements.some(p => p.prNumber === constructedPrNumber);
+            if (isDuplicate) {
+                toast.warning(`?? PR Number "${constructedPrNumber}" already exists. Saving anyway...`);
+            }
         } else {
-            constructedPrNumber = `${prYear}-${prMonth}-${finalSequence}`;
+            if (otherDocId.trim()) {
+                constructedPrNumber = otherDocId.trim();
+            } else {
+                const randomDigits = Math.floor(100000 + Math.random() * 900000);
+                constructedPrNumber = `OD-${prYear.slice(-2)}-${randomDigits}`;
+            }
         }
-
-        // Check for duplicate PR number (warning only, still saves)
-        const isDuplicate = procurements.some(p => p.prNumber === constructedPrNumber);
-        if (isDuplicate) {
-            toast.warning(`⚠️ PR Number "${constructedPrNumber}" already exists. Saving anyway...`);
-        }
-
 
         const cleanAbc = abc ? parseFloat(removeCommas(abc)) : 0;
         const cleanBid = bidAmount ? parseFloat(removeCommas(bidAmount)) : 0;
@@ -596,6 +629,15 @@ const AddProcurement: React.FC = () => {
                 toast.error('SVP Bid Amount must be less than 1,000,000');
                 return;
             }
+        } else if (formMode === 'Shopping') {
+            if (cleanAbc >= 1000000) {
+                toast.error('Shopping ABC must be less than 1,000,000');
+                return;
+            }
+            if (cleanBid >= 1000000) {
+                toast.error('Shopping Bid Amount must be less than 1,000,000');
+                return;
+            }
         } else if (formMode === 'Regular') {
             if (cleanAbc < 1000000) {
                 toast.error('Regular Bidding ABC must be at least 1,000,000');
@@ -603,14 +645,16 @@ const AddProcurement: React.FC = () => {
             }
         }
 
-        if (storageMode === 'shelf' && (!cabinetId || !shelfId || !folderId)) {
-            toast.error('Please select full shelf storage location (Drawer -> Cabinet -> Folder)');
-            return;
-        }
+        if (storageStatus === 'In Storage') {
+            if (storageMode === 'shelf' && (!cabinetId || !shelfId)) {
+                toast.error('Please select at least a Drawer and Cabinet');
+                return;
+            }
 
-        if (storageMode === 'box' && (!boxId || !folderId)) {
-            toast.error('Please select a box and a folder inside it');
-            return;
+            if (storageMode === 'box' && (!boxId)) {
+                toast.error('Please select a box');
+                return;
+            }
         }
 
         // For box mode, we need to get the shelf info from the box
@@ -638,14 +682,15 @@ const AddProcurement: React.FC = () => {
                 prNumber: constructedPrNumber,
                 description, // Remarks
                 projectName, // Particulars
-                procurementType: formMode === 'SVP' ? 'SVP' : 'Regular Bidding',
-                division: selectedDivision?.name, // End User
+                procurementType: formMode === 'SVP' ? 'SVP' : formMode === 'Shopping' ? 'Shopping' : formMode === 'Other Documents' ? 'Other Documents' : 'Regular Bidding',
+                division: formMode === 'Other Documents' ? customDivision : selectedDivision?.name, // End User
 
                 // Location
-                cabinetId: storageMode === 'shelf' ? cabinetId : finalCabinetId,
-                shelfId: storageMode === 'shelf' ? shelfId : finalShelfId,
-                folderId, // Common for both
-                boxId: storageMode === 'box' ? boxId : undefined,
+                storageStatus,
+                cabinetId: storageStatus === 'In Storage' ? (storageMode === 'shelf' ? cabinetId : finalCabinetId) : undefined,
+                shelfId: storageStatus === 'In Storage' ? (storageMode === 'shelf' ? shelfId : finalShelfId) : undefined,
+                folderId: storageStatus === 'In Storage' ? folderId : undefined,
+                boxId: storageStatus === 'In Storage' ? (storageMode === 'box' ? boxId : undefined) : undefined,
 
                 status,
                 procurementStatus: procurementProcessStatus,
@@ -686,7 +731,16 @@ const AddProcurement: React.FC = () => {
                 ntpDate: ntpDate,
                 awardedToDate: awardedToDate,
 
+                // Dates - Shopping
+                shoppingReceivedDate: shoppingReceivedDate || undefined,
+                shoppingBudgetCertDate: shoppingBudgetCertDate || undefined,
+                shoppingRfqDate: shoppingRfqDate || undefined,
+                shoppingCanvassDate: shoppingCanvassDate || undefined,
+                shoppingAbstractDate: shoppingAbstractDate || undefined,
+                shoppingPurchaseOrderDate: shoppingPurchaseOrderDate || undefined,
+
                 checklist: checklist, // If specialized checks needed
+                customChecklistItems,
                 tags: [],
 
                 // Borrowing Info
@@ -706,6 +760,8 @@ const AddProcurement: React.FC = () => {
             // Navigate to appropriate list
             if (formMode === 'SVP') {
                 navigate('/procurement/list?type=SVP');
+            } else if (formMode === 'Other Documents') {
+                navigate('/procurement/list?type=Other Documents');
             } else {
                 navigate('/procurement/list?type=Regular');
             }
@@ -719,7 +775,8 @@ const AddProcurement: React.FC = () => {
 
 
     // Tab validation: basic tab requires projectName, PR details, selected division, and ABC, Staff, Status, Date
-    const canGoToMonitoring = !!projectName.trim() &&
+    const canGoToMonitoring = formMode === 'Other Documents' ? false : (
+        !!projectName.trim() &&
         (prFormat === 'new' || !!prDivisionId) &&
         !!prMonth &&
         !!prYear &&
@@ -728,20 +785,27 @@ const AddProcurement: React.FC = () => {
         !!abc.trim() &&
         !!staffIncharge.trim() &&
         !!procurementProcessStatus &&
-        !!dateStatusUpdated;
+        !!dateStatusUpdated
+    );
     // Storage can be navigated to if Monitoring is reachable (since Monitoring dates are optional)
     const canGoToDocuments = canGoToMonitoring;
-    const canGoToStorage = canGoToDocuments;
+    const canGoToStorage = formMode === 'Other Documents'
+        ? (!!projectName.trim() && !!customDivision.trim() && !!prYear)
+        : canGoToMonitoring; // For SVP and Regular, can go to storage after basic info is complete
 
-    const TAB_LABELS = { basic: '1. Basic Info', monitoring: '2. Monitoring', documents: '3. Documents', storage: '4. Storage' };
+    const TAB_LABELS = formMode === 'SVP'
+        ? { basic: '1. Basic Info', monitoring: '2. Monitoring', storage: '3. Storage' }
+        : formMode === 'Other Documents'
+            ? { basic: '1. Basic Info', storage: '2. Storage' }
+            : { basic: '1. Basic Info', monitoring: '2. Monitoring', documents: '3. Documents', storage: '4. Storage' };
 
     return (
         <div className="space-y-6 pb-20 fade-in animate-in duration-500">
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-white">Add Procurement</h1>
-                    <p className="text-slate-400 mt-1">Create a new record</p>
+                    <h1 className="text-3xl font-bold text-foreground">Add Procurement</h1>
+                    <p className="text-muted-foreground mt-1">Create a new record</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                     {/* Clear Form Button */}
@@ -756,26 +820,39 @@ const AddProcurement: React.FC = () => {
                         Clear Form
                     </Button>
                     {/* Procurement Type Toggle */}
-                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
+                    <div className="flex bg-background p-1 rounded-lg border border-border">
                         <button
                             onClick={() => setFormMode('SVP')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'SVP' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'SVP' ? 'bg-blue-600 text-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                            Small Value Procurement
+                            SVP
                         </button>
                         <button
                             onClick={() => setFormMode('Regular')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'Regular' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'Regular' ? 'bg-purple-600 text-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}
                         >
                             Regular Bidding
+                        </button>
+                        <button
+                            onClick={() => setFormMode('Other Documents')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${formMode === 'Other Documents' ? 'bg-orange-600 text-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            Other Documents
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Step Tab Navigation */}
-            <div className="flex bg-[#0f172a] rounded-xl border border-slate-800 p-1 gap-1 overflow-x-auto">
-                {(['basic', 'monitoring', 'documents', 'storage'] as const).map(tab => {
+            <div className="flex bg-card rounded-xl border border-border p-1 gap-1 overflow-x-auto">
+                {(['basic', 'monitoring', 'documents', 'storage'] as const).filter(t => {
+                    // For Other Documents: only show basic and storage
+                    if (formMode === 'Other Documents') return t === 'basic' || t === 'storage';
+                    // For SVP: hide documents tab
+                    if (formMode === 'SVP') return t !== 'documents';
+                    // For Regular Bidding: show all tabs
+                    return true;
+                }).map(tab => {
                     const isDisabled = (tab === 'monitoring' && !canGoToMonitoring) ||
                         (tab === 'documents' && !canGoToDocuments) ||
                         (tab === 'storage' && !canGoToStorage);
@@ -786,16 +863,16 @@ const AddProcurement: React.FC = () => {
                             onClick={() => { if (!isDisabled) setActiveTab(tab); }}
                             disabled={isDisabled}
                             className={`flex-1 flex items-center justify-center min-w-[130px] px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${isDisabled
-                                ? 'opacity-50 cursor-not-allowed text-slate-500 bg-transparent'
+                                ? 'opacity-50 cursor-not-allowed text-muted-foreground bg-transparent'
                                 : activeTab === tab
-                                    ? (tab === 'basic' ? 'bg-blue-600 text-white shadow-md'
-                                        : tab === 'monitoring' ? 'bg-purple-600 text-white shadow-md'
-                                            : tab === 'documents' ? 'bg-amber-600 text-white shadow-md'
-                                                : 'bg-emerald-600 text-white shadow-md')
-                                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                                    ? (tab === 'basic' ? 'bg-blue-600 text-foreground shadow-md'
+                                        : tab === 'monitoring' ? 'bg-purple-600 text-foreground shadow-md'
+                                            : tab === 'documents' ? 'bg-amber-600 text-foreground shadow-md'
+                                                : 'bg-emerald-600 text-foreground shadow-md')
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                                 }`}
                         >
-                            {isDisabled && <span className="mr-2 text-[10px]">🔒</span>}
+                            {isDisabled && <span className="mr-2 text-[10px]">??</span>}
                             {TAB_LABELS[tab]}
                         </button>
                     );
@@ -806,307 +883,371 @@ const AddProcurement: React.FC = () => {
 
                 {/* TAB 1: Basic Information */}
                 <div className={activeTab !== 'basic' ? 'hidden' : ''}>
-                    <Card className="border-none bg-[#0f172a] shadow-lg">
+                    <Card className="border-none bg-card shadow-lg">
                         <CardContent className="p-6 space-y-6">
-                            <h3 className="text-lg font-semibold text-white border-b border-slate-800 pb-2">
-                                {formMode === 'SVP' ? 'SVP Details' : 'Regular Bidding Details'}
-                                <span className="ml-2 text-xs font-normal text-slate-500">Fields marked with <span className="text-red-400">*</span> are required</span>
+                            <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
+                                {formMode === 'SVP' ? 'SVP Details' : formMode === 'Other Documents' ? 'Other Documents Details' : 'Regular Bidding Details'}
+                                <span className="ml-2 text-xs font-normal text-muted-foreground">Fields marked with <span className="text-red-400">*</span> are required</span>
                             </h3>
 
                             {/* Project Title */}
                             <div className="space-y-2">
-                                <Label className="text-slate-300">Project Title (Particulars) <span className="text-red-400">*</span></Label>
+                                <Label className="text-foreground">Project Title (Particulars) <span className="text-red-400">*</span></Label>
                                 <Input
                                     value={projectName}
                                     onChange={(e) => setProjectName(e.target.value)}
                                     placeholder="Enter project title..."
-                                    className="bg-[#1e293b] border-slate-700 text-white"
+                                    className="bg-background border-border text-foreground"
                                 />
                             </div>
 
                             {/* PR Number Construction */}
-                            <div className="p-4 rounded-lg bg-[#1e293b]/50 border border-slate-700/50 space-y-4">
-                                <div className="flex items-center justify-between gap-2 flex-wrap">
-                                    <Label className="text-slate-300">PR Number Construction</Label>
-                                    {/* Format Toggle */}
-                                    <div className="flex bg-[#0f172a] p-0.5 rounded-lg border border-slate-700 text-xs">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPrFormat('old')}
-                                            className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'old' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                                                }`}
-                                        >
-                                            Old (Div-Mon-Yr-#)
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPrFormat('new')}
-                                            className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'new' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-                                                }`}
-                                        >
-                                            New (Yr-Mon-#)
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className={`grid gap-4 items-end ${prFormat === 'old' ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
-                                    {/* Division Acronym — only for Old format */}
-                                    {prFormat === 'old' && (
-                                        <div className="space-y-2">
-                                            <Label className="text-xs text-slate-400">Division <span className="text-red-400">*</span></Label>
-                                            <Select value={prDivisionId} onValueChange={setPrDivisionId}>
-                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                    <SelectValue placeholder="Select Division" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                    {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
-                                                        <SelectItem key={div.id} value={div.id}>
-                                                            {div.name} ({div.abbreviation})
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    )}
-
-                                    {/* Month */}
+                            {formMode === 'Other Documents' ? (
+                                <>
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-400">Month</Label>
-                                        <Select value={prMonth} onValueChange={setPrMonth}>
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
-                                                {MONTHS.map(m => (
-                                                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Year (YY) */}
-                                    <div className="space-y-2">
-                                        <Label className="text-xs text-slate-400">Year (YY)</Label>
+                                        <Label className="text-foreground">PR Number / Document ID <span className="text-muted-foreground text-xs">(Optional)</span></Label>
                                         <Input
-                                            type="text"
-                                            maxLength={4}
-                                            value={prYear}
-                                            onChange={(e) => setPrYear(e.target.value)}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
+                                            value={otherDocId}
+                                            onChange={(e) => setOtherDocId(e.target.value)}
+                                            placeholder="e.g. OD-YY-000000 (Auto-generated if blank)"
+                                            className="bg-background border-border text-foreground"
                                         />
                                     </div>
-
-                                    {/* Sequence */}
                                     <div className="space-y-2">
-                                        <Label className="text-xs text-slate-400">Sequence</Label>
-                                        <Input
-                                            value={prSequence}
-                                            onChange={(e) => {
-                                                // Mark that the user has taken ownership of the sequence.
-                                                // This prevents Firebase context updates from overwriting it.
-                                                userEditedSequence.current = true;
-                                                setPrSequence(e.target.value);
-                                            }}
-                                            maxLength={7}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="mt-2 text-sm text-slate-400 flex items-center justify-between">
-                                    <div>
-                                        Preview: <span className="font-mono text-emerald-400 font-bold ml-2">
-                                            {prFormat === 'old'
-                                                ? (prDivisionId && divisions.find(d => d.id === prDivisionId)
-                                                    ? `${divisions.find(d => d.id === prDivisionId)?.abbreviation}-${prMonth}-${prYear.slice(-2)}-${prSequence}`
-                                                    : 'XXX-XXX-XX-XXX')
-                                                : (prYear && prMonth && prSequence ? `${prYear}-${prMonth}-${prSequence}` : 'XXXX-XXX-XXXX')
-                                            }
-                                        </span>
-                                    </div>
-                                    <div className="flex flex-col items-end">
-                                        <div className="flex items-center gap-2">
-                                            {isCheckingPr ? (
-                                                <>
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />
-                                                    <span className="text-xs text-slate-400 italic">Validating ID...</span>
-                                                </>
-                                            ) : (prExists !== null && (
-                                                prExists
-                                                    ? <span className="text-xs text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded animate-pulse">PR Existed</span>
-                                                    : <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">PR still not on Records</span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* End User (Division) */}
-                            <div className="space-y-2">
-                                <Label className="text-slate-300">End User (Division) <span className="text-red-400">*</span></Label>
-                                <Select value={selectedDivisionId} onValueChange={setSelectedDivisionId}>
-                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                        <SelectValue placeholder="Select Division" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                        {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
-                                            <SelectItem key={div.id} value={div.id}>{div.name} ({div.abbreviation})</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* ABC and Bid Amount */}
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">ABC (Approved Budget for Contract) <span className="text-red-400">*</span></Label>
-                                    <Input
-                                        type="text"
-                                        value={getDisplayValue(abc)}
-                                        onChange={(e) => handleNumberInput(e.target.value, setAbc)}
-                                        onBlur={() => {
-                                            const val = abc ? parseFloat(removeCommas(abc)) : 0;
-                                            if (val > 0) {
-                                                if (formMode === 'SVP' && val >= 1000000) {
-                                                    toast.error("SVP ABC cannot exceed 1 Million");
-                                                } else if (formMode === 'Regular' && val < 1000000) {
-                                                    toast.error("Regular Bidding ABC must be at least 1 Million");
-                                                }
-                                            }
-                                        }}
-                                        placeholder={formMode === 'SVP' ? "50,000.00" : "5,000,000.00"}
-                                        className="bg-[#1e293b] border-slate-700 text-white font-mono"
-                                    />
-                                    <p className="text-xs text-slate-500">Amount in Philippine Pesos (commas added automatically)</p>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">Bid Amount (Contract Price) <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                    <Input
-                                        type="text"
-                                        value={getDisplayValue(bidAmount)}
-                                        onChange={(e) => handleNumberInput(e.target.value, setBidAmount)}
-                                        onBlur={() => {
-                                            const val = bidAmount ? parseFloat(removeCommas(bidAmount)) : 0;
-                                            if (val > 0) {
-                                                if (formMode === 'SVP' && val >= 1000000) {
-                                                    toast.error("SVP Bid Amount cannot exceed 1 Million");
-                                                }
-                                            }
-                                        }}
-                                        placeholder={formMode === 'SVP' ? "50,000.00" : "5,000,000.00"}
-                                        className="bg-[#1e293b] border-slate-700 text-white font-mono"
-                                    />
-                                    <p className="text-xs text-slate-500">Actual awarded/contract amount</p>
-                                </div>
-                            </div>
-
-                            {/* Additional Information Section */}
-                            <div className="pt-4 border-t border-slate-800 space-y-4">
-                                <h4 className="text-white font-semibold flex items-center gap-2">
-                                    Additional Information
-                                </h4>
-
-                                <div className="grid gap-6 md:grid-cols-2 mt-2">
-                                    <div className="space-y-2">
-                                        <Label className="text-slate-300">Supplier / Awarded To <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                        <Select value={supplier || 'none'} onValueChange={(val) => setSupplier(val === 'none' ? '' : val)}>
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectValue placeholder="Select Supplier" />
+                                        <Label className="text-foreground">Division <span className="text-red-400">*</span></Label>
+                                        <Select
+                                            value={customDivision}
+                                            onValueChange={setCustomDivision}
+                                        >
+                                            <SelectTrigger className="bg-background border-border text-foreground">
+                                                <SelectValue placeholder="Select Division" />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
-                                                <SelectItem value="none" className="text-slate-400 italic">No Supplier selected</SelectItem>
-                                                {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-                                                    <SelectItem key={s.id} value={s.id}>
-                                                        {s.name}
+                                            <SelectContent className="bg-background border-border text-foreground max-h-[200px]">
+                                                {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
+                                                    <SelectItem key={div.id} value={div.name}>
+                                                        {div.name} ({div.abbreviation})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Staff In Charge <span className="text-red-400">*</span></Label>
+                                        <Label className="text-foreground">Year <span className="text-red-400">*</span></Label>
                                         <Input
-                                            value={staffIncharge}
-                                            onChange={(e) => setStaffIncharge(e.target.value)}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
+                                            value={prYear}
+                                            onChange={(e) => setPrYear(e.target.value)}
+                                            placeholder="e.g. 2024"
+                                            className="bg-background border-border text-foreground"
                                         />
                                     </div>
-                                </div>
-                            </div>
+                                    <div className="space-y-2">
+                                        <Label className="text-foreground">Remarks <span className="text-muted-foreground text-xs">(Flexible input for extra info/PR/documents)</span></Label>
+                                        <Textarea
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="Enter remarks..."
+                                            className="bg-background border-border text-foreground resize-y"
+                                            rows={4}
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* PR Number Construction */}
+                                    <div className="p-4 rounded-lg bg-background/50 border border-border/50 space-y-4">
+                                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <Label className="text-foreground">PR Number Construction</Label>
+                                            {/* Format Toggle */}
+                                            <div className="flex bg-card p-0.5 rounded-lg border border-border text-xs">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPrFormat('old')}
+                                                    className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'old' ? 'bg-blue-600 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                                        }`}
+                                                >
+                                                    Old (Div-Mon-Yr-#)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPrFormat('new')}
+                                                    className={`px-3 py-1 rounded-md font-medium transition-all ${prFormat === 'new' ? 'bg-purple-600 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                                                        }`}
+                                                >
+                                                    New (Yr-Mon-#)
+                                                </button>
+                                            </div>
+                                        </div>
 
-                            {/* Remarks */}
-                            <div className="space-y-2 pt-4 border-t border-slate-800">
-                                <Label className="text-slate-300">Remarks <span className="text-slate-500 text-xs">(Optional)</span></Label>
-                                <Textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    placeholder="Enter any additional remarks or notes..."
-                                    className="bg-[#1e293b] border-slate-700 text-white min-h-[80px] resize-y"
-                                    rows={3}
-                                />
-                            </div>
+                                        <div className={`grid gap-4 items-end ${prFormat === 'old' ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+                                            {/* Division Acronym — only for Old format */}
+                                            {prFormat === 'old' && (
+                                                <div className="space-y-2">
+                                                    <Label className="text-xs text-muted-foreground">Division <span className="text-red-400">*</span></Label>
+                                                    <Select value={prDivisionId} onValueChange={setPrDivisionId}>
+                                                        <SelectTrigger className="bg-background border-border text-foreground">
+                                                            <SelectValue placeholder="Select Division" />
+                                                        </SelectTrigger>
+                                                        <SelectContent className="bg-background border-border text-foreground">
+                                                            {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
+                                                                <SelectItem key={div.id} value={div.id}>
+                                                                    {div.name} ({div.abbreviation})
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            )}
 
-                            {/* Process Status and Date */}
-                            <div className="grid gap-6 md:grid-cols-2">
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">Process Status <span className="text-red-400">*</span></Label>
-                                    <Select value={procurementProcessStatus} onValueChange={(val: any) => setProcurementProcessStatus(val)}>
-                                        <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                            {PROCUREMENT_PROCESS_STATUSES.map(s => (
-                                                <SelectItem key={s} value={s}>{s}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-slate-300">Date Status Updated <span className="text-red-400">*</span></Label>
-                                    <Input
-                                        type="text"
-                                        defaultValue={dateStatusUpdated ? format(dateStatusUpdated, "MM/dd/yyyy") : format(new Date(), "MM/dd/yyyy")}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            try {
-                                                const d = new Date(val);
-                                                if (!isNaN(d.getTime())) {
-                                                    setDateStatusUpdated(d);
-                                                }
-                                            } catch (err) { }
-                                        }}
-                                        className="bg-[#1e293b] border-slate-700 text-white [color-scheme:dark]"
-                                    />
-                                </div>
-                            </div>
+                                            {/* Month */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs text-muted-foreground">Month</Label>
+                                                <Select value={prMonth} onValueChange={setPrMonth}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground max-h-[200px]">
+                                                        {MONTHS.map(m => (
+                                                            <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {/* Year (YY) */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs text-muted-foreground">Year (YY)</Label>
+                                                <Input
+                                                    type="text"
+                                                    maxLength={4}
+                                                    value={prYear}
+                                                    onChange={(e) => setPrYear(e.target.value)}
+                                                    className="bg-background border-border text-foreground"
+                                                />
+                                            </div>
+
+                                            {/* Sequence */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs text-muted-foreground">Sequence</Label>
+                                                <Input
+                                                    value={prSequence}
+                                                    onChange={(e) => {
+                                                        // Mark that the user has taken ownership of the sequence.
+                                                        // This prevents Firebase context updates from overwriting it.
+                                                        userEditedSequence.current = true;
+                                                        setPrSequence(e.target.value);
+                                                    }}
+                                                    maxLength={7}
+                                                    className="bg-background border-border text-foreground"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-2 text-sm text-muted-foreground flex items-center justify-between">
+                                            <div>
+                                                Preview: <span className="font-mono text-emerald-400 font-bold ml-2">
+                                                    {prFormat === 'old'
+                                                        ? (prDivisionId && divisions.find(d => d.id === prDivisionId)
+                                                            ? `${divisions.find(d => d.id === prDivisionId)?.abbreviation}-${prMonth}-${prYear.slice(-2)}-${prSequence}`
+                                                            : 'XXX-XXX-XX-XXX')
+                                                        : (prYear && prMonth && prSequence ? `${prYear}-${prMonth}-${prSequence}` : 'XXXX-XXX-XXXX')
+                                                    }
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <div className="flex items-center gap-2">
+                                                    {isCheckingPr ? (
+                                                        <>
+                                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                                                            <span className="text-xs text-muted-foreground italic">Validating ID...</span>
+                                                        </>
+                                                    ) : (prExists !== null && (
+                                                        prExists
+                                                            ? <span className="text-xs text-red-500 font-bold bg-red-500/10 px-2 py-0.5 rounded animate-pulse">PR Existed</span>
+                                                            : <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">PR still not on Records</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* End User (Division) */}
+                                    <div className="space-y-2">
+                                        <Label className="text-foreground">End User (Division) <span className="text-red-400">*</span></Label>
+                                        <Select value={selectedDivisionId} onValueChange={setSelectedDivisionId}>
+                                            <SelectTrigger className="bg-background border-border text-foreground">
+                                                <SelectValue placeholder="Select Division" />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-background border-border text-foreground">
+                                                {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
+                                                    <SelectItem key={div.id} value={div.id}>{div.name} ({div.abbreviation})</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* ABC and Bid Amount */}
+                                    <div className="grid gap-6 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label className="text-foreground">ABC (Approved Budget for Contract) <span className="text-red-400">*</span></Label>
+                                            <Input
+                                                type="text"
+                                                value={getDisplayValue(abc)}
+                                                onChange={(e) => handleNumberInput(e.target.value, setAbc)}
+                                                onBlur={() => {
+                                                    const val = abc ? parseFloat(removeCommas(abc)) : 0;
+                                                    if (val > 0) {
+                                                        if ((formMode === 'SVP' || formMode === 'Shopping') && val >= 1000000) {
+                                                            toast.error(`${formMode} ABC cannot exceed 1 Million`);
+                                                        } else if (formMode === 'Regular' && val < 1000000) {
+                                                            toast.error("Regular Bidding ABC must be at least 1 Million");
+                                                        }
+                                                    }
+                                                }}
+                                                placeholder={formMode === 'SVP' ? "50,000.00" : "5,000,000.00"}
+                                                className="bg-background border-border text-foreground font-mono"
+                                            />
+                                            <p className="text-xs text-muted-foreground">Amount in Philippine Pesos (commas added automatically)</p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label className="text-foreground">Bid Amount (Contract Price) <span className="text-muted-foreground text-xs">(Optional)</span></Label>
+                                            <Input
+                                                type="text"
+                                                value={getDisplayValue(bidAmount)}
+                                                onChange={(e) => handleNumberInput(e.target.value, setBidAmount)}
+                                                onBlur={() => {
+                                                    const val = bidAmount ? parseFloat(removeCommas(bidAmount)) : 0;
+                                                    if (val > 0) {
+                                                        if ((formMode === 'SVP' || formMode === 'Shopping') && val >= 1000000) {
+                                                            toast.error(`${formMode} Bid Amount cannot exceed 1 Million`);
+                                                        }
+                                                    }
+                                                }}
+                                                placeholder={formMode === 'SVP' ? "50,000.00" : "5,000,000.00"}
+                                                className="bg-background border-border text-foreground font-mono"
+                                            />
+                                            <p className="text-xs text-muted-foreground">Actual awarded/contract amount</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Additional Information Section */}
+                                    <div className="pt-4 border-t border-border space-y-4">
+                                        <h4 className="text-foreground font-semibold flex items-center gap-2">
+                                            Additional Information
+                                        </h4>
+
+                                        <div className="grid gap-6 md:grid-cols-2 mt-2">
+                                            <div className="space-y-2">
+                                                <Label className="text-foreground">Supplier / Awarded To <span className="text-muted-foreground text-xs">(Optional)</span></Label>
+                                                <Select value={supplier || 'none'} onValueChange={(val) => setSupplier(val === 'none' ? '' : val)}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue placeholder="Select Supplier" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground max-h-[200px]">
+                                                        <SelectItem value="none" className="text-muted-foreground italic">No Supplier selected</SelectItem>
+                                                        {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
+                                                            <SelectItem key={s.id} value={s.name}>
+                                                                {s.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-foreground">Staff In Charge <span className="text-red-400">*</span></Label>
+                                                <Input
+                                                    value={staffIncharge}
+                                                    onChange={(e) => setStaffIncharge(e.target.value)}
+                                                    className="bg-background border-border text-foreground"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Remarks */}
+                                    <div className="space-y-2 pt-4 border-t border-border">
+                                        <Label className="text-foreground">Remarks <span className="text-muted-foreground text-xs">(Optional)</span></Label>
+                                        <Textarea
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="Enter any additional remarks or notes..."
+                                            className="bg-background border-border text-foreground min-h-[80px] resize-y"
+                                            rows={3}
+                                        />
+                                    </div>
+
+                                    {/* Process Status and Date */}
+                                    <div className="grid gap-6 md:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label className="text-foreground">Process Status <span className="text-red-400">*</span></Label>
+                                            <Select value={procurementProcessStatus} onValueChange={(val: any) => setProcurementProcessStatus(val)}>
+                                                <SelectTrigger className="bg-background border-border text-foreground">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent className="bg-background border-border text-foreground">
+                                                    {PROCUREMENT_PROCESS_STATUSES.map(s => (
+                                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-foreground">Date Status Updated <span className="text-red-400">*</span></Label>
+                                            <Input
+                                                type="text"
+                                                defaultValue={dateStatusUpdated ? format(dateStatusUpdated, "MM/dd/yyyy") : format(new Date(), "MM/dd/yyyy")}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    try {
+                                                        const d = new Date(val);
+                                                        if (!isNaN(d.getTime())) {
+                                                            setDateStatusUpdated(d);
+                                                        }
+                                                    } catch (err) { }
+                                                }}
+                                                className="bg-background border-border text-foreground [color-scheme:dark]"
+                                            />
+                                        </div>
+                                    </div>
 
 
+                                </>
+                            )}
                         </CardContent>
                     </Card>
 
                     {/* Basic Info Next Button */}
                     <div className="flex justify-end mt-4">
-                        <Button type="button" onClick={() => setActiveTab('monitoring')} disabled={!canGoToMonitoring} className={`px-8 text-white ${!canGoToMonitoring ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}>
-                            Next: Monitoring &rarr;
-                        </Button>
+                        {formMode === 'Other Documents' ? (
+                            <Button type="button" onClick={() => setActiveTab('storage')} disabled={!canGoToStorage} className={`px-8 text-foreground ${!canGoToStorage ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                                Next: Storage &rarr;
+                            </Button>
+                        ) : formMode === 'SVP' ? (
+                            <Button type="button" onClick={() => setActiveTab('storage')} disabled={!canGoToStorage} className={`px-8 text-foreground ${!canGoToStorage ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                Next: Storage &rarr;
+                            </Button>
+                        ) : (
+                            <Button type="button" onClick={() => setActiveTab('monitoring')} disabled={!canGoToMonitoring} className={`px-8 text-foreground ${!canGoToMonitoring ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}>
+                                Next: Monitoring &rarr;
+                            </Button>
+                        )}
                     </div>
                 </div>
 
                 {/* TAB 3: Documents — Checklist */}
                 <div className={activeTab !== 'documents' ? 'hidden' : ''}>
-                    <Card className="border-none bg-[#0f172a] shadow-lg">
+                    <Card className="border-none bg-card shadow-lg">
                         <CardContent className="p-6 space-y-6">
-                            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                <h3 className="text-lg font-semibold text-white">
-                                    Attached Documents Checklist <span className="text-slate-500 text-xs font-normal">(Optional)</span>
+                            <div className="flex justify-between items-center border-b border-border pb-2">
+                                <h3 className="text-lg font-semibold text-foreground">
+                                    Attached Documents Checklist <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
                                 </h3>
                                 <div className="flex gap-2">
                                     <Button
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        className="text-xs h-7 bg-slate-800 border-border text-foreground hover:text-foreground hover:bg-slate-700"
                                         onClick={() => {
                                             const allChecked: any = {};
                                             checklistItems.forEach(item => allChecked[item.key] = true);
@@ -1119,7 +1260,7 @@ const AddProcurement: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        className="text-xs h-7 bg-slate-800 border-border text-foreground hover:text-foreground hover:bg-slate-700"
                                         onClick={() => setChecklist({})}
                                     >
                                         Uncheck All
@@ -1131,7 +1272,7 @@ const AddProcurement: React.FC = () => {
                                 {/* Left Column */}
                                 <div className="space-y-3">
                                     {checklistItems.slice(0, 11).map((item) => (
-                                        <div key={item.key} className="flex items-start space-x-3 p-2 rounded hover:bg-slate-800/50 transition-colors">
+                                        <div key={item.key} className="flex items-start space-x-3 p-2 rounded hover:bg-muted/50 transition-colors">
                                             <Checkbox
                                                 id={item.key}
                                                 checked={!!checklist[item.key]}
@@ -1142,7 +1283,7 @@ const AddProcurement: React.FC = () => {
                                             />
                                             <label
                                                 htmlFor={item.key}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-300 cursor-pointer"
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground cursor-pointer"
                                             >
                                                 {item.label}
                                             </label>
@@ -1153,7 +1294,7 @@ const AddProcurement: React.FC = () => {
                                 {/* Right Column */}
                                 <div className="space-y-3">
                                     {checklistItems.slice(11).map((item) => (
-                                        <div key={item.key} className="flex items-start space-x-3 p-2 rounded hover:bg-slate-800/50 transition-colors">
+                                        <div key={item.key} className="flex items-start space-x-3 p-2 rounded hover:bg-muted/50 transition-colors">
                                             <Checkbox
                                                 id={item.key}
                                                 checked={!!checklist[item.key]}
@@ -1164,7 +1305,26 @@ const AddProcurement: React.FC = () => {
                                             />
                                             <label
                                                 htmlFor={item.key}
-                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-300 cursor-pointer"
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground cursor-pointer"
+                                            >
+                                                {item.label}
+                                            </label>
+                                        </div>
+                                    ))}
+                                    {/* Custom Items */}
+                                    {customChecklistItems.map((item) => (
+                                        <div key={item.key} className="flex items-start space-x-3 p-2 rounded bg-muted/20 hover:bg-muted/50 transition-colors">
+                                            <Checkbox
+                                                id={item.key}
+                                                checked={!!checklist[item.key]}
+                                                onCheckedChange={(checked) =>
+                                                    setChecklist(prev => ({ ...prev, [item.key]: !!checked }))
+                                                }
+                                                className="border-slate-500 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 mt-0.5"
+                                            />
+                                            <label
+                                                htmlFor={item.key}
+                                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-foreground cursor-pointer"
                                             >
                                                 {item.label}
                                             </label>
@@ -1172,30 +1332,66 @@ const AddProcurement: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Add Custom Item Form */}
+                            <div className="pt-4 border-t border-border flex items-center gap-2">
+                                <Input
+                                    placeholder="Add missing checklist item..."
+                                    value={newCustomItem}
+                                    onChange={(e) => setNewCustomItem(e.target.value)}
+                                    className="bg-background border-border text-foreground max-w-sm"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (newCustomItem.trim()) {
+                                                const key = `custom_${Date.now()}`;
+                                                setCustomChecklistItems(prev => [...prev, { key, label: newCustomItem.trim() }]);
+                                                setChecklist(prev => ({ ...prev, [key]: true }));
+                                                setNewCustomItem('');
+                                            }
+                                        }
+                                    }}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="bg-slate-700 hover:bg-slate-600 text-white"
+                                    onClick={() => {
+                                        if (newCustomItem.trim()) {
+                                            const key = `custom_${Date.now()}`;
+                                            setCustomChecklistItems(prev => [...prev, { key, label: newCustomItem.trim() }]);
+                                            setChecklist(prev => ({ ...prev, [key]: true }));
+                                            setNewCustomItem('');
+                                        }
+                                    }}
+                                >
+                                    <Plus className="w-4 h-4 mr-1" /> Add
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card >
 
                     {/* Prev / Next Navigation for Documents tab */}
                     <div className="flex justify-between mt-4">
-                        <Button type="button" variant="outline" onClick={() => setActiveTab('monitoring')} className="border-slate-700 text-slate-300 hover:bg-slate-800 px-8">
+                        <Button type="button" variant="outline" onClick={() => setActiveTab('monitoring')} className="border-border text-foreground hover:bg-muted px-8">
                             &larr; Previous: Monitoring
                         </Button>
-                        <Button type="button" onClick={() => setActiveTab('storage')} disabled={!canGoToStorage} className={`px-8 text-white ${!canGoToStorage ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                        <Button type="button" onClick={() => setActiveTab('storage')} disabled={!canGoToStorage} className={`px-8 text-foreground ${!canGoToStorage ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
                             Next: Storage &rarr;
                         </Button>
                     </div>
                 </div>
 
-                {/* TAB 2: Monitoring Process â€” correctly placed outside Documents */}
+                {/* TAB 2: Monitoring Process — correctly placed outside Documents */}
                 <div className={activeTab !== 'monitoring' ? 'hidden' : ''} id="tab-monitoring">
                     {/* TAB 2: Monitoring Process */}
-                    <Card className="border-none bg-[#0f172a] shadow-lg">
+                    <Card className="border-none bg-card shadow-lg">
                         <CardContent className="p-6 space-y-6">
-                            <div className="border-b border-slate-800 pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="border-b border-border pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-white">
-                                        {formMode === 'Regular' ? 'Regular Bidding Monitoring Progress' : 'SVP Monitoring Process'}
-                                        <span className="ml-2 text-slate-500 text-xs font-normal">(Optional — check dates as they are completed)</span>
+                                    <h3 className="text-lg font-semibold text-foreground">
+                                        {formMode === 'Regular' ? 'Regular Bidding Monitoring Progress' : formMode === 'Shopping' ? 'Shopping Monitoring Progress' : 'SVP Monitoring Process'}
+                                        <span className="ml-2 text-muted-foreground text-xs font-normal">(Optional — check dates as they are completed)</span>
                                     </h3>
                                 </div>
                                 <div className="flex gap-2 shrink-0">
@@ -1203,7 +1399,7 @@ const AddProcurement: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        className="text-xs h-7 bg-slate-800 border-border text-foreground hover:text-foreground hover:bg-slate-700"
                                         onClick={() => {
                                             const today = format(new Date(), 'MM/dd/yyyy');
                                             setReceivedPrDate(today);
@@ -1221,6 +1417,13 @@ const AddProcurement: React.FC = () => {
                                                 setContractDate(today);
                                                 setNtpDate(today);
                                                 setAwardedToDate(today);
+                                            } else if (formMode === 'Shopping') {
+                                                setShoppingReceivedDate(today);
+                                                setShoppingBudgetCertDate(today);
+                                                setShoppingRfqDate(today);
+                                                setShoppingCanvassDate(today);
+                                                setShoppingAbstractDate(today);
+                                                setShoppingPurchaseOrderDate(today);
                                             } else {
                                                 setRfqCanvassDate(today);
                                                 setRfqOpeningDate(today);
@@ -1236,7 +1439,7 @@ const AddProcurement: React.FC = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        className="text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                        className="text-xs h-7 bg-slate-800 border-border text-foreground hover:text-foreground hover:bg-slate-700"
                                         onClick={() => {
                                             setReceivedPrDate('');
                                             setPrDeliberatedDate('');
@@ -1256,6 +1459,12 @@ const AddProcurement: React.FC = () => {
                                             setRfqOpeningDate('');
                                             setForwardedGsdDate('');
                                             setPoNtpForwardedGsdDate('');
+                                            setShoppingReceivedDate('');
+                                            setShoppingBudgetCertDate('');
+                                            setShoppingRfqDate('');
+                                            setShoppingCanvassDate('');
+                                            setShoppingAbstractDate('');
+                                            setShoppingPurchaseOrderDate('');
                                         }}
                                     >
                                         Uncheck All
@@ -1297,6 +1506,19 @@ const AddProcurement: React.FC = () => {
 
                                                 {/* Final Step: Awarded to Supplier Date */}
                                                 <MonitoringDateField label="Awarded to Supplier" value={awardedToDate} setValue={(v: string) => setAwardedToDate(v)} isDisabled={!ntpDate} activeColor="emerald" />
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : formMode === 'Shopping' ? (
+                                    <>
+                                        <div className="space-y-2">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                <MonitoringDateField label="Received PR to Action" value={shoppingReceivedDate} setValue={(v: string) => { setShoppingReceivedDate(v); if (!v) { setShoppingBudgetCertDate(''); setShoppingRfqDate(''); setShoppingCanvassDate(''); setShoppingAbstractDate(''); setShoppingPurchaseOrderDate(''); } }} activeColor="amber" />
+                                                <MonitoringDateField label="Budget Certification (CNAS)" value={shoppingBudgetCertDate} setValue={(v: string) => { setShoppingBudgetCertDate(v); if (!v) { setShoppingRfqDate(''); setShoppingCanvassDate(''); setShoppingAbstractDate(''); setShoppingPurchaseOrderDate(''); } }} isDisabled={!shoppingReceivedDate} activeColor="amber" />
+                                                <MonitoringDateField label="RFQ Preparation" value={shoppingRfqDate} setValue={(v: string) => { setShoppingRfqDate(v); if (!v) { setShoppingCanvassDate(''); setShoppingAbstractDate(''); setShoppingPurchaseOrderDate(''); } }} isDisabled={!shoppingBudgetCertDate} activeColor="amber" />
+                                                <MonitoringDateField label="Canvass / Price Inquiry" value={shoppingCanvassDate} setValue={(v: string) => { setShoppingCanvassDate(v); if (!v) { setShoppingAbstractDate(''); setShoppingPurchaseOrderDate(''); } }} isDisabled={!shoppingRfqDate} activeColor="amber" />
+                                                <MonitoringDateField label="Abstract & LCRB" value={shoppingAbstractDate} setValue={(v: string) => { setShoppingAbstractDate(v); if (!v) { setShoppingPurchaseOrderDate(''); } }} isDisabled={!shoppingCanvassDate} activeColor="amber" />
+                                                <MonitoringDateField label="Purchase Order Issued" value={shoppingPurchaseOrderDate} setValue={(v: string) => { setShoppingPurchaseOrderDate(v); }} isDisabled={!shoppingAbstractDate} activeColor="amber" />
                                             </div>
                                         </div>
                                     </>
@@ -1359,10 +1581,10 @@ const AddProcurement: React.FC = () => {
 
                     {/* Monitoring Tab Nav Buttons */}
                     <div className="flex justify-between mt-4">
-                        <Button type="button" variant="outline" onClick={() => setActiveTab('basic')} className="border-slate-700 text-slate-300 hover:bg-slate-800 px-8">
+                        <Button type="button" variant="outline" onClick={() => setActiveTab('basic')} className="border-border text-foreground hover:bg-muted px-8">
                             &larr; Previous: Basic Info
                         </Button>
-                        <Button type="button" onClick={() => setActiveTab('documents')} disabled={!canGoToDocuments} className={`px-8 text-white ${!canGoToDocuments ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                        <Button type="button" onClick={() => setActiveTab('documents')} disabled={!canGoToDocuments} className={`px-8 text-foreground ${!canGoToDocuments ? 'bg-slate-700 opacity-50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'}`}>
                             Next: Documents &rarr;
                         </Button>
                     </div>
@@ -1370,186 +1592,214 @@ const AddProcurement: React.FC = () => {
 
                 {/* TAB 4: Storage Location */}
                 <div className={activeTab !== 'storage' ? 'hidden' : ''}>
-                    <Card className="border-none bg-[#0f172a] shadow-lg">
+                    <Card className="border-none bg-card shadow-lg">
                         <CardContent className="p-6 space-y-6">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-800 pb-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border pb-4">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-white mb-1">Storage Location <span className="text-red-400">*</span></h3>
-                                    <p className="text-sm text-slate-400">Where is the physical file stored?</p>
-                                </div>
-                                <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
-                                    <button
-                                        type="button"
-                                        onClick={() => setStorageMode('shelf')}
-                                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${storageMode === 'shelf' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                                    >
-                                        <FolderTree className="h-4 w-4" />
-                                        Drawer Storage
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setStorageMode('box')}
-                                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${storageMode === 'box' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-                                    >
-                                        <Archive className="h-4 w-4" />
-                                        Box Storage
-                                    </button>
+                                    <h3 className="text-lg font-semibold text-foreground mb-1">Storage Location <span className="text-red-400">*</span></h3>
+                                    <p className="text-sm text-muted-foreground">Where is the physical file stored?</p>
                                 </div>
                             </div>
 
-                            <div className="grid gap-6">
-                                {storageMode === 'shelf' && (
-                                    <div className="grid gap-4 md:grid-cols-2 animate-in fade-in zoom-in-95 duration-200">
-                                        <div className="space-y-2">
-                                            <Label className="text-slate-300">Drawer</Label>
-                                            <Select value={cabinetId} onValueChange={setCabinetId}>
-                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                    <SelectValue placeholder="Select Drawer" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                    {cabinets.map((c) => (
-                                                        <SelectItem key={c.id} value={c.id} className="text-white">{c.code} - {c.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label className="text-slate-300">Cabinet</Label>
-                                            <Select value={shelfId} onValueChange={setShelfId} disabled={!cabinetId}>
-                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                    <SelectValue placeholder="Select Cabinet" />
-                                                </SelectTrigger>
-                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                    {availableShelves.map((s) => (
-                                                        <SelectItem key={s.id} value={s.id} className="text-white">{s.code} - {s.name}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-                                )}
+                            <div className="border border-border p-4 rounded-xl bg-slate-800/20 space-y-4 mb-6">
+                                <Label className="text-foreground">File Storage Process Status</Label>
+                                <Select value={storageStatus} onValueChange={(val: any) => setStorageStatus(val)}>
+                                    <SelectTrigger className="bg-background border-border text-foreground w-full max-w-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-background border-border text-foreground">
+                                        <SelectItem value="Processing">Processing (Currently being processed)</SelectItem>
+                                        <SelectItem value="In Storage">In Storage (Ready to be filed)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
 
-                                {storageMode === 'box' && (
-                                    <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                        <Label className="text-slate-300">Box</Label>
-                                        <Select value={boxId} onValueChange={setBoxId}>
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectValue placeholder="Select a box..." />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                {boxes.map((b) => (
-                                                    <SelectItem key={b.id} value={b.id} className="text-white">{b.code} - {b.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <p className="text-xs text-slate-500">Select the box where the file will be stored</p>
+                            {storageStatus === 'In Storage' && (
+                                <div className="grid gap-6 border-t border-border pt-6">
+                                    <div className="flex bg-background p-1 rounded-lg border border-border self-start">
+                                        <button
+                                            type="button"
+                                            onClick={() => setStorageMode('shelf')}
+                                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${storageMode === 'shelf' ? 'bg-blue-600 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                                        >
+                                            <FolderTree className="h-4 w-4" />
+                                            Drawer → Cabinet → Folder
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setStorageMode('box')}
+                                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${storageMode === 'box' ? 'bg-orange-600 text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+                                        >
+                                            <Archive className="h-4 w-4" />
+                                            Box → File (Direct)
+                                        </button>
                                     </div>
-                                )}
-
-                                <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
-                                    <Label className="text-slate-300">
-                                        {storageMode === 'box' ? 'Folder in Box *' : 'Folder *'}
-                                    </Label>
-                                    <Select value={folderId} onValueChange={setFolderId} disabled={(storageMode === 'box' ? !boxId : !shelfId) || isFoldersLoading}>
-                                        <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white flex-1">
-                                            <SelectValue placeholder={isFoldersLoading ? "Loading folders..." : "Select Folder"} />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                            {availableFolders.map((f) => (
-                                                <SelectItem key={f.id} value={f.id} className="text-white">{f.code} - {f.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                {isFoldersLoading && (
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                                        <span className="text-xs text-blue-400">Syncing folders...</span>
-                                    </div>
-                                )}
-                                {(storageMode === 'box' ? boxId : shelfId) && !isFoldersLoading && availableFolders.length === 0 && (
-                                    <p className="text-xs text-amber-500">No folders found. Create one.</p>
-                                )}
-
-                                {isCreatingFolder && (
-                                    <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700 space-y-4">
-                                        <div className="flex justify-between items-center">
-                                            <h4 className="text-sm font-semibold text-white">Create New Folder</h4>
-                                            <Button size="sm" variant="ghost" type="button" onClick={() => setIsCreatingFolder(false)} className="h-6 w-6 p-0 hover:bg-slate-700"><X className="h-4 w-4" /></Button>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <Label className="text-xs text-slate-400">Name</Label>
-                                                <Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} className="h-8 bg-[#1e293b] border-slate-600" placeholder="Folder Name" />
-                                            </div>
-                                            <div>
-                                                <Label className="text-xs text-slate-400">Code</Label>
-                                                <Input value={newFolderCode} onChange={(e) => setNewFolderCode(e.target.value)} className="h-8 bg-[#1e293b] border-slate-600" placeholder="e.g. F1" />
-                                            </div>
-                                        </div>
-                                        <Button type="button" onClick={handleCreateFolder} size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700">Create Folder</Button>
-                                    </div>
-                                )}
-
-                                <div className="border-t border-slate-700 pt-4 mt-2">
-                                    <div className="space-y-2">
-                                        <Label className="text-slate-300">Physical File Status</Label>
-                                        <Select value={status} onValueChange={(val) => { setStatus(val as ProcurementStatus); if (val === 'active' && !borrowedDate) { setBorrowedDate(new Date()); } }}>
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                <SelectItem value="archived" className="text-white">Archived (In Storage)</SelectItem>
-                                                <SelectItem value="active" className="text-white">Borrowed (Out)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {status === 'active' && (
-                                        <div className="mt-6 p-4 rounded-lg bg-amber-900/20 border border-amber-700/50 space-y-4">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="h-6 w-1 bg-amber-500 rounded-full"></div>
-                                                <h4 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">Borrowing Information</h4>
-                                            </div>
-                                            <div className="grid gap-4 md:grid-cols-2">
-                                                <div className="space-y-2">
-                                                    <Label className="text-slate-300">Who Borrows</Label>
-                                                    <Input value={borrowerName} onChange={(e) => setBorrowerName(e.target.value)} placeholder="Enter borrower's name..." className="bg-[#1e293b] border-slate-700 text-white" />
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label className="text-slate-300">Division Who Borrows</Label>
-                                                    <Select value={borrowingDivisionId} onValueChange={setBorrowingDivisionId}>
-                                                        <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                            <SelectValue placeholder="Select Division" />
-                                                        </SelectTrigger>
-                                                        <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                            {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
-                                                                <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                                    {storageMode === 'shelf' && (
+                                        <div className="grid gap-4 md:grid-cols-2 animate-in fade-in zoom-in-95 duration-200">
+                                            <div className="space-y-2">
+                                                <Label className="text-foreground">Drawer</Label>
+                                                <Select value={cabinetId} onValueChange={setCabinetId}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue placeholder="Select Drawer" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground">
+                                                        {cabinets.map((c) => (
+                                                            <SelectItem key={c.id} value={c.id} className="text-foreground">{c.code} - {c.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="text-slate-300">When Was Borrowed</Label>
-                                                <DatePickerField label="" date={borrowedDate} setDate={setBorrowedDate} />
+                                                <Label className="text-foreground">Cabinet</Label>
+                                                <Select value={shelfId} onValueChange={setShelfId} disabled={!cabinetId}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue placeholder="Select Cabinet" />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground">
+                                                        {availableShelves.map((s) => (
+                                                            <SelectItem key={s.id} value={s.id} className="text-foreground">{s.code} - {s.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                         </div>
                                     )}
+
+                                    {storageMode === 'box' && (
+                                        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                                            {/* Path breadcrumb */}
+                                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border">
+                                                <Archive className="h-3 w-3 text-orange-500" />
+                                                <span className="text-orange-500 font-medium">Box</span>
+                                                <span className="text-muted-foreground/50">→</span>
+                                                <span className="text-amber-500">Folder <span className="text-muted-foreground">(optional)</span></span>
+                                                <span className="text-muted-foreground/50">→</span>
+                                                <span className="text-emerald-500">File (Record)</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-foreground">Box <span className="text-red-400">*</span></Label>
+                                                <Select value={boxId} onValueChange={setBoxId}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue placeholder="Select a box..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground">
+                                                        {boxes.map((b) => (
+                                                            <SelectItem key={b.id} value={b.id} className="text-foreground">{b.code} — {b.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <p className="text-xs text-muted-foreground">Select the box where the file will directly be stored</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-2 animate-in fade-in zoom-in-95 duration-200">
+                                        <Label className="text-foreground">
+                                            {storageMode === 'box' ? 'Folder in Box (Optional)' : 'Folder (Optional)'}
+                                        </Label>
+                                        <Select value={folderId} onValueChange={setFolderId} disabled={(storageMode === 'box' ? !boxId : !shelfId) || isFoldersLoading}>
+                                            <SelectTrigger className="bg-background border-border text-foreground flex-1">
+                                                <SelectValue placeholder={isFoldersLoading ? "Loading folders..." : "Select Folder"} />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-background border-border text-foreground">
+                                                {availableFolders.map((f) => (
+                                                    <SelectItem key={f.id} value={f.id} className="text-foreground">{f.code} - {f.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {isFoldersLoading && (
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                                            <span className="text-xs text-blue-400">Syncing folders...</span>
+                                        </div>
+                                    )}
+                                    {(storageMode === 'box' ? boxId : shelfId) && !isFoldersLoading && availableFolders.length === 0 && (
+                                        <p className="text-xs text-amber-500">No folders found. Create one.</p>
+                                    )}
+
+                                    {isCreatingFolder && (
+                                        <div className="p-4 rounded-lg bg-slate-800/50 border border-border space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <h4 className="text-sm font-semibold text-foreground">Create New Folder</h4>
+                                                <Button size="sm" variant="ghost" type="button" onClick={() => setIsCreatingFolder(false)} className="h-6 w-6 p-0 hover:bg-slate-700"><X className="h-4 w-4" /></Button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Name</Label>
+                                                    <Input value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} className="h-8 bg-background border-border" placeholder="Folder Name" />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-xs text-muted-foreground">Code</Label>
+                                                    <Input value={newFolderCode} onChange={(e) => setNewFolderCode(e.target.value)} className="h-8 bg-background border-border" placeholder="e.g. F1" />
+                                                </div>
+                                            </div>
+                                            <Button type="button" onClick={handleCreateFolder} size="sm" className="w-full bg-emerald-600 hover:bg-emerald-700">Create Folder</Button>
+                                        </div>
+                                    )}
+
+                                    {storageStatus === 'In Storage' && (
+                                        <div className="border-t border-border pt-4 mt-2">
+                                            <div className="space-y-2">
+                                                <Label className="text-foreground">Physical File Status</Label>
+                                                <Select value={status} onValueChange={(val) => { setStatus(val as ProcurementStatus); if (val === 'active' && !borrowedDate) { setBorrowedDate(new Date()); } }}>
+                                                    <SelectTrigger className="bg-background border-border text-foreground">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="bg-background border-border text-foreground">
+                                                        <SelectItem value="archived" className="text-foreground">Archived (In Storage)</SelectItem>
+                                                        <SelectItem value="active" className="text-foreground">Borrowed (Out)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+
+                                            {status === 'active' && (
+                                                <div className="mt-6 p-4 rounded-lg bg-amber-900/20 border border-amber-700/50 space-y-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="h-6 w-1 bg-amber-500 rounded-full"></div>
+                                                        <h4 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">Borrowing Information</h4>
+                                                    </div>
+                                                    <div className="grid gap-4 md:grid-cols-2">
+                                                        <div className="space-y-2">
+                                                            <Label className="text-foreground">Who Borrows</Label>
+                                                            <Input value={borrowerName} onChange={(e) => setBorrowerName(e.target.value)} placeholder="Enter borrower's name..." className="bg-background border-border text-foreground" />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label className="text-foreground">Division Who Borrows</Label>
+                                                            <Select value={borrowingDivisionId} onValueChange={setBorrowingDivisionId}>
+                                                                <SelectTrigger className="bg-background border-border text-foreground">
+                                                                    <SelectValue placeholder="Select Division" />
+                                                                </SelectTrigger>
+                                                                <SelectContent className="bg-background border-border text-foreground">
+                                                                    {[...divisions].sort((a, b) => a.name.localeCompare(b.name)).map(div => (
+                                                                        <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-foreground">When Was Borrowed</Label>
+                                                        <DatePickerField label="" date={borrowedDate} setDate={setBorrowedDate} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            </div>
+                            )}
                         </CardContent>
                     </Card>
 
                     {/* Storage Tab Nav Buttons */}
                     <div className="flex justify-between mt-4">
-                        <Button type="button" variant="outline" onClick={() => setActiveTab('documents')} className="border-slate-700 text-slate-300 hover:bg-slate-800 px-8">
-                            &larr; Previous: Documents
+                        <Button type="button" variant="outline" onClick={() => setActiveTab(formMode === 'Other Documents' || formMode === 'SVP' ? 'monitoring' : 'documents')} className="border-border text-foreground hover:bg-muted px-8">
+                            &larr; Previous: {formMode === 'Other Documents' || formMode === 'SVP' ? 'Monitoring' : 'Documents'}
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isLoading || (storageMode === 'shelf' ? (!cabinetId || !shelfId || !folderId) : (!boxId || !folderId))}
-                            className="bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 text-white px-10 py-4 text-base font-semibold shadow-xl"
+                            disabled={isLoading || (storageStatus === 'In Storage' ? (storageMode === 'shelf' ? (!cabinetId || !shelfId) : (!boxId)) : false)}
+                            className="bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 text-foreground px-10 py-4 text-base font-semibold shadow-xl"
                         >
                             {isLoading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Saving Record...</> : <><Save className="mr-2 h-5 w-5" />Save Procurement Record</>}
                         </Button>
@@ -1563,16 +1813,18 @@ const AddProcurement: React.FC = () => {
 export default AddProcurement;
 
 
-// Extracted Components to prevent focus loss\n
+// Extracted Components to prevent focus loss
+
 const MonitoringDateField = ({ label, value, setValue, isDisabled = false, activeColor = 'blue' }: any) => {
     const activeClasses = {
         blue: { border: 'border-blue-500/30', bg: 'bg-blue-900/10', text: 'text-blue-400', checkBg: 'data-[state=checked]:bg-blue-600', checkBorder: 'data-[state=checked]:border-blue-600', ring: 'focus:ring-blue-500' },
         purple: { border: 'border-purple-500/30', bg: 'bg-purple-900/10', text: 'text-purple-400', checkBg: 'data-[state=checked]:bg-purple-600', checkBorder: 'data-[state=checked]:border-purple-600', ring: 'focus:ring-purple-500' },
-        emerald: { border: 'border-emerald-500/30', bg: 'bg-emerald-900/10', text: 'text-emerald-400', checkBg: 'data-[state=checked]:bg-emerald-600', checkBorder: 'data-[state=checked]:border-emerald-600', ring: 'focus:ring-emerald-500' }
+        emerald: { border: 'border-emerald-500/30', bg: 'bg-emerald-900/10', text: 'text-emerald-400', checkBg: 'data-[state=checked]:bg-emerald-600', checkBorder: 'data-[state=checked]:border-emerald-600', ring: 'focus:ring-emerald-500' },
+        amber: { border: 'border-amber-500/30', bg: 'bg-amber-900/10', text: 'text-amber-400', checkBg: 'data-[state=checked]:bg-amber-600', checkBorder: 'data-[state=checked]:border-amber-600', ring: 'focus:ring-amber-500' }
     }[activeColor] as any;
 
     return (
-        <div className={`space-y-2 p-3 rounded-lg border transition-all ${isDisabled ? 'border-slate-800 bg-slate-900/30 opacity-50' : value ? `${activeClasses.border} ${activeClasses.bg}` : 'border-slate-700 bg-slate-800/30'}`}>
+        <div className={`space-y-2 p-3 rounded-lg border transition-all ${isDisabled ? 'border-border bg-slate-900/30 opacity-50' : value ? `${activeClasses.border} ${activeClasses.bg}` : 'border-border bg-slate-800/30'}`}>
             <div className="flex items-center gap-2">
                 <Checkbox
                     checked={!!value}
@@ -1580,7 +1832,7 @@ const MonitoringDateField = ({ label, value, setValue, isDisabled = false, activ
                     disabled={isDisabled}
                     className={`h-4 w-4 border-slate-500 ${activeClasses.checkBg} ${activeClasses.checkBorder} disabled:opacity-50`}
                 />
-                <span className={`text-sm font-medium ${value ? activeClasses.text : isDisabled ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
+                <span className={`text-sm font-medium ${value ? activeClasses.text : isDisabled ? 'text-slate-600' : 'text-foreground'}`}>{label}</span>
             </div>
             <div className="pl-6">
                 <input
@@ -1589,7 +1841,7 @@ const MonitoringDateField = ({ label, value, setValue, isDisabled = false, activ
                     placeholder="Progress/Date..."
                     onChange={(e) => setValue(e.target.value)}
                     disabled={isDisabled}
-                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${isDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                    className={`h-8 px-2 rounded-md bg-card border border-border text-foreground text-xs w-full outline-none ${activeClasses.ring} ${isDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
                 />
             </div>
         </div>
@@ -1598,24 +1850,24 @@ const MonitoringDateField = ({ label, value, setValue, isDisabled = false, activ
 
 const DatePickerField = ({ label, date, setDate }: { label: string, date: Date | undefined, setDate: (d: Date | undefined) => void }) => (
     <div className="flex flex-col space-y-1">
-        <Label className="text-xs text-slate-400">{label}</Label>
+        <Label className="text-xs text-muted-foreground">{label}</Label>
         <Popover>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
-                    className={`h-9 w-full justify-between text-left font-normal bg-[#1e293b] border-slate-700 text-white hover:bg-[#253045] ${!date && "text-muted-foreground"}`}
+                    className={`h-9 w-full justify-between text-left font-normal bg-background border-border text-foreground hover:bg-[#253045] ${!date && "text-muted-foreground"}`}
                 >
                     <span>{date ? format(date, 'MMM d, yyyy') : "Pick date"}</span>
-                    <CalendarIcon className="ml-2 h-4 w-4 text-white opacity-100" />
+                    <CalendarIcon className="ml-2 h-4 w-4 text-foreground opacity-100" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0 bg-[#1e293b] border-slate-700">
+            <PopoverContent className="w-auto p-0 bg-background border-border">
                 <Calendar
                     mode="single"
                     selected={date}
                     onSelect={setDate}
                     initialFocus
-                    className="bg-[#1e293b] text-white"
+                    className="bg-background text-foreground"
                 />
             </PopoverContent>
         </Popover>

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Division } from '@/types/procurement';
+import { useNavigate } from 'react-router-dom';
 import { useData } from '@/contexts/DataContext';
 import { onDivisionsChange, addDivision, updateDivision, deleteDivision } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import { Plus, Search, Pencil, Trash2, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const Divisions: React.FC = () => {
+    const navigate = useNavigate();
     const { procurements } = useData();
     const [divisions, setDivisions] = useState<Division[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -135,23 +137,23 @@ const Divisions: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-white">Divisions</h1>
-                    <p className="text-slate-400">Manage organizational divisions and abbreviations</p>
+                    <p className="text-muted-foreground">Manage organizational divisions and abbreviations</p>
                 </div>
                 <Button onClick={() => { resetForm(); setIsAddOpen(true); }} className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="mr-2 h-4 w-4" /> Add Division
                 </Button>
             </div>
 
-            <Card className="bg-[#0f172a] border-slate-800">
+            <Card className="bg-background border-border">
                 <CardHeader className="pb-4">
                     <div className="flex items-center gap-4">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
                                 placeholder="Search divisions..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10 bg-[#1e293b] border-slate-700 text-white placeholder:text-slate-500"
+                                className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
                             />
                         </div>
                     </div>
@@ -159,22 +161,22 @@ const Divisions: React.FC = () => {
                 <CardContent>
                     <Table>
                         <TableHeader>
-                            <TableRow className="border-slate-800 hover:bg-transparent">
-                                <TableHead className="text-slate-300">Name</TableHead>
-                                <TableHead className="text-slate-300">PR Number Prefix (Abbr)</TableHead>
-                                <TableHead className="text-slate-300 text-center">Total Files(As End User)</TableHead>
-                                <TableHead className="text-slate-300">Created At</TableHead>
-                                <TableHead className="text-right text-slate-300">Actions</TableHead>
+                            <TableRow className="border-border hover:bg-transparent">
+                                <TableHead className="text-muted-foreground">Name</TableHead>
+                                <TableHead className="text-muted-foreground">PR Number Prefix (Abbr)</TableHead>
+                                <TableHead className="text-muted-foreground text-center">Total Files(As End User)</TableHead>
+                                <TableHead className="text-muted-foreground">Created At</TableHead>
+                                <TableHead className="text-right text-muted-foreground">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {filteredDivisions.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center text-slate-500 h-24">No divisions found</TableCell>
+                                    <TableCell colSpan={4} className="text-center text-muted-foreground h-24">No divisions found</TableCell>
                                 </TableRow>
                             ) : (
                                 filteredDivisions.map((division) => (
-                                    <TableRow key={division.id} className="border-slate-800 hover:bg-[#1e293b]">
+                                    <TableRow key={division.id} className="border-border hover:bg-card">
                                         <TableCell className="font-medium text-white">
                                             <div className="flex items-center gap-2">
                                                 <Building2 className="h-4 w-4 text-blue-400" />
@@ -186,15 +188,18 @@ const Divisions: React.FC = () => {
                                                 {division.abbreviation}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-slate-300 text-sm text-center font-mono">
+                                        <TableCell className="text-muted-foreground text-sm text-center font-mono">
                                             {procurements.filter(p => p.division === division.name).length}
                                         </TableCell>
-                                        <TableCell className="text-slate-400 text-xs">
+                                        <TableCell className="text-muted-foreground text-xs">
                                             {format(new Date(division.createdAt), 'MMM d, yyyy')}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
-                                                <Button variant="ghost" size="icon" onClick={() => openEdit(division)} className="h-8 w-8 text-slate-400 hover:text-white">
+                                                <Button variant="outline" size="sm" onClick={() => navigate(`/procurement?tab=records&division=${encodeURIComponent(division.name)}`)} className="h-8 text-xs text-blue-400 border-blue-500/20 hover:bg-blue-500/10">
+                                                    View Records
+                                                </Button>
+                                                <Button variant="ghost" size="icon" onClick={() => openEdit(division)} className="h-8 w-8 text-muted-foreground hover:text-white">
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
                                                 <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(division)} className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10">
@@ -212,7 +217,7 @@ const Divisions: React.FC = () => {
 
             {/* Add Modal */}
             <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                <DialogContent className="bg-[#1e293b] border-slate-700 text-white">
+                <DialogContent className="bg-card border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Add Division</DialogTitle>
                         <DialogDescription>Create a new division for PR number generation.</DialogDescription>
@@ -225,7 +230,7 @@ const Divisions: React.FC = () => {
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 placeholder="e.g. Information Technology"
-                                className="bg-[#0f172a] border-slate-700"
+                                className="bg-background border-border"
                             />
                         </div>
                         <div className="grid gap-2">
@@ -235,9 +240,9 @@ const Divisions: React.FC = () => {
                                 value={formData.abbreviation}
                                 onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
                                 placeholder="e.g. IT"
-                                className="bg-[#0f172a] border-slate-700"
+                                className="bg-background border-border"
                             />
-                            <p className="text-xs text-slate-400">Used in PR Numbers (e.g. IT-0226-001)</p>
+                            <p className="text-xs text-muted-foreground">Used in PR Numbers (e.g. IT-0226-001)</p>
                         </div>
                     </div>
                     <DialogFooter>
@@ -249,10 +254,10 @@ const Divisions: React.FC = () => {
 
             {/* Edit Modal */}
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent className="bg-[#1e293b] border-slate-700 text-white">
+                <DialogContent className="bg-card border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Edit Division</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Update division details.
                         </DialogDescription>
                     </DialogHeader>
@@ -263,7 +268,7 @@ const Divisions: React.FC = () => {
                                 id="edit-name"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                className="bg-[#0f172a] border-slate-700"
+                                className="bg-background border-border"
                             />
                         </div>
                         <div className="grid gap-2">
@@ -272,7 +277,7 @@ const Divisions: React.FC = () => {
                                 id="edit-abbr"
                                 value={formData.abbreviation}
                                 onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
-                                className="bg-[#0f172a] border-slate-700"
+                                className="bg-background border-border"
                             />
                         </div>
                         <div className="grid gap-2">
@@ -281,7 +286,7 @@ const Divisions: React.FC = () => {
                                 id="edit-endUser"
                                 value={formData.endUser}
                                 onChange={(e) => setFormData({ ...formData, endUser: e.target.value })}
-                                className="bg-[#0f172a] border-slate-700"
+                                className="bg-background border-border"
                             />
                         </div>
                     </div>
@@ -294,10 +299,10 @@ const Divisions: React.FC = () => {
 
             {/* Delete Confirmation Modal */}
             <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-                <DialogContent className="bg-[#1e293b] border-slate-700 text-white">
+                <DialogContent className="bg-card border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Delete Division</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             {associatedFileCount > 0
                                 ? "This division cannot be deleted."
                                 : "Are you sure you want to delete this division?"}
@@ -320,7 +325,7 @@ const Divisions: React.FC = () => {
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-slate-300">
+                            <p className="text-muted-foreground">
                                 You are about to delete <span className="font-bold text-white">{divisionToDelete?.name}</span>.
                                 This action cannot be undone.
                             </p>
@@ -328,7 +333,7 @@ const Divisions: React.FC = () => {
                     </div>
 
                     <DialogFooter>
-                        <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)} className="border-slate-700 text-white hover:bg-slate-800">
+                        <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)} className="border-border text-white hover:bg-muted">
                             Cancel
                         </Button>
                         {associatedFileCount === 0 && (

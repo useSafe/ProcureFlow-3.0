@@ -51,8 +51,9 @@ import {
 } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { deleteProcurement, updateProcurement, addProcurement, onProcurementsChange, onCabinetsChange, onShelvesChange, onFoldersChange, onDivisionsChange, onBoxesChange, recalculateAllFolders } from '@/lib/storage';
+import { deleteProcurement, updateProcurement, addProcurement, onProcurementsChange, onCabinetsChange, onShelvesChange, onFoldersChange, onDivisionsChange, onBoxesChange, recalculateAllFolders, onSuppliersChange } from '@/lib/storage';
 import { Procurement, Cabinet, Shelf, Folder, Box, ProcurementStatus, UrgencyLevel, ProcurementFilters, Division } from '@/types/procurement';
+import { Supplier } from '@/types/supplier';
 import { format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { DateRange } from 'react-day-picker';
 import ProcurementDetailsDialog from '@/components/procurement/ProcurementDetailsDialog';
@@ -111,15 +112,16 @@ const MONTHS = [
 
 const checklistItems = CHECKLIST_ITEMS;
 
-const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = 'blue' }: { label: string; value: string | undefined; onChange: (date: string | undefined) => void; disabled: boolean; activeColor?: 'blue' | 'purple' | 'emerald' }) => {
+const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = 'blue' }: { label: string; value: string | undefined; onChange: (date: string | undefined) => void; disabled: boolean; activeColor?: 'blue' | 'purple' | 'emerald' | 'amber' }) => {
     const activeClasses = {
         blue: { border: 'border-blue-500/30', bg: 'bg-blue-900/10', text: 'text-blue-400', checkBg: 'data-[state=checked]:bg-blue-600', checkBorder: 'data-[state=checked]:border-blue-600', ring: 'focus:ring-blue-500' },
         purple: { border: 'border-purple-500/30', bg: 'bg-purple-900/10', text: 'text-purple-400', checkBg: 'data-[state=checked]:bg-purple-600', checkBorder: 'data-[state=checked]:border-purple-600', ring: 'focus:ring-purple-500' },
-        emerald: { border: 'border-emerald-500/30', bg: 'bg-emerald-900/10', text: 'text-emerald-400', checkBg: 'data-[state=checked]:bg-emerald-600', checkBorder: 'data-[state=checked]:border-emerald-600', ring: 'focus:ring-emerald-500' }
+        emerald: { border: 'border-emerald-500/30', bg: 'bg-emerald-900/10', text: 'text-emerald-400', checkBg: 'data-[state=checked]:bg-emerald-600', checkBorder: 'data-[state=checked]:border-emerald-600', ring: 'focus:ring-emerald-500' },
+        amber: { border: 'border-amber-500/30', bg: 'bg-amber-900/10', text: 'text-amber-400', checkBg: 'data-[state=checked]:bg-amber-600', checkBorder: 'data-[state=checked]:border-amber-600', ring: 'focus:ring-amber-500' }
     }[activeColor] as any;
 
     return (
-        <div className={`space-y-2 p-3 rounded-lg border transition-all ${disabled ? 'border-slate-800 bg-slate-900/30 opacity-50' : value ? `${activeClasses.border} ${activeClasses.bg}` : 'border-slate-700 bg-[#1e293b]/50'}`}>
+        <div className={`space-y-2 p-3 rounded-lg border transition-all ${disabled ? 'border-border bg-slate-900/30 opacity-50' : value ? `${activeClasses.border} ${activeClasses.bg}` : 'border-border bg-card/50'}`}>
             <div className="flex items-center gap-2">
                 <Checkbox
                     checked={!!value}
@@ -127,7 +129,7 @@ const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = '
                     disabled={disabled}
                     className={`h-4 w-4 border-slate-500 ${activeClasses.checkBg} ${activeClasses.checkBorder} disabled:opacity-50`}
                 />
-                <span className={`text-sm font-medium ${value ? activeClasses.text : disabled ? 'text-slate-600' : 'text-slate-300'}`}>{label}</span>
+                <span className={`text-sm font-medium ${value ? activeClasses.text : disabled ? 'text-slate-600' : 'text-muted-foreground'}`}>{label}</span>
             </div>
             <div className="pl-6">
                 <input
@@ -136,7 +138,7 @@ const MonitoringDateField = ({ label, value, onChange, disabled, activeColor = '
                     placeholder="Progress/Date..."
                     onChange={(e) => onChange(e.target.value || undefined)}
                     disabled={disabled}
-                    className={`h-8 px-2 rounded-md bg-[#0f172a] border border-slate-700 text-slate-300 text-xs w-full outline-none ${activeClasses.ring} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                    className={`h-8 px-2 rounded-md bg-background border border-border text-muted-foreground text-xs w-full outline-none ${activeClasses.ring} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
                 />
             </div>
         </div>
@@ -213,6 +215,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     const [shelves, setShelves] = useState<Shelf[]>([]); // These are actually Cabinets (Tier 2)
     const [folders, setFolders] = useState<Folder[]>([]);
     const [boxes, setBoxes] = useState<Box[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
@@ -240,14 +243,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
     // New: multi-select status filter state (empty = all)
 
-    const [statusFilters, setStatusFilters] = useState<string[]>([]); // Procurement Status (Active/Archived)
-    const [procurementStatusFilters, setProcurementStatusFilters] = useState<string[]>([]);
+    const [statusFilters, setStatusFilters] = useState<string[]>(searchParams.get('status') ? [searchParams.get('status') as string] : []); // Procurement Status (Active/Archived)
+    const [procurementStatusFilters, setProcurementStatusFilters] = useState<string[]>(searchParams.get('processStatus') ? [searchParams.get('processStatus') as string] : []);
 
     // Phase 6 Filters
     const [divisions, setDivisions] = useState<Division[]>([]);
-    const [filterDivision, setFilterDivision] = useState<string>('all_divisions');
-    const [typeFilters, setTypeFilters] = useState<string[]>([]); // Multi-select Type filter
+    const [filterDivision, setFilterDivision] = useState<string>(searchParams.get('division') || 'all_divisions');
+    const [typeFilters, setTypeFilters] = useState<string[]>(searchParams.get('type') ? [searchParams.get('type') as string] : []); // Multi-select Type filter
     const [filterDateRange, setFilterDateRange] = useState<{ from: Date | undefined; to: Date | undefined } | undefined>(undefined);
+    const [filterDateType, setFilterDateType] = useState<'dateAdded' | 'deadline' | 'createdAt'>('dateAdded');
 
     // Export Modal State
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -434,7 +438,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     } | null>(null);
 
     // Helper functions for status
-    const getStatusLabel = (status: ProcurementStatus): string => {
+    const getStatusLabel = (status: string): string => {
+        if (status === 'processing') return 'Processing';
         return status === 'active' ? 'Borrowed' : 'Archived';
     };
 
@@ -445,7 +450,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     };
 
     // Status change workflow
-    const handleStatusChange = (procurement: Procurement, newStatus: ProcurementStatus) => {
+    const handleStatusChange = (procurement: Procurement, newStatus: ProcurementStatus | 'processing') => {
         if (newStatus === 'active') {
             // Going to Borrowed - show edit modal
             setBorrowEditModal({
@@ -454,6 +459,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 borrowerDivision: procurement.borrowerDivision || '',
                 borrowedDate: procurement.borrowedDate || new Date().toISOString()
             });
+        } else if (newStatus === 'processing' as any) {
+            // Set storageStatus to Processing (not yet physically filed)
+            updateProcurement(procurement.id, { storageStatus: 'Processing' }, user?.email, user?.name)
+                .then(() => toast.success('Status set to Processing'))
+                .catch(() => toast.error('Failed to update status'));
         } else {
             // Going to Available (Archived) - show return modal
             setReturnModal({
@@ -517,6 +527,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         const unsubFolders = onFoldersChange(setFolders);
         const unsubBoxes = onBoxesChange(setBoxes);
         const unsubDivisions = onDivisionsChange(setDivisions);
+        const unsubSuppliers = onSuppliersChange(setSuppliers);
 
         return () => {
             unsubProcurements();
@@ -525,6 +536,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             unsubFolders();
             unsubBoxes();
             unsubDivisions();
+            unsubSuppliers();
         };
     }, []);
 
@@ -653,8 +665,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
     // Filter options
     // build status options based on current procurements (fall back to common ones)
     // Filter options
-    const statusOptions: ProcurementStatus[] = ['active', 'archived'];
-    const typeOptions = ['Regular Bidding', 'SVP'];
+    const statusOptions: string[] = ['active', 'archived', 'processing'];
+    const typeOptions = ['Regular Bidding', 'SVP', 'Other Documents'];
 
     const toggleStatusFilter = (status: string) => {
         setStatusFilters(prev => {
@@ -681,7 +693,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
     const PROCESS_STATUS_OPTIONS = [
         'Completed',
-        'In Progress',
+        'Processing',
         'Failure',
         'Returned PR to EU',
         'Not yet Acted',
@@ -701,7 +713,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         const matchesFolder = !filters.folderId || filters.folderId === 'all_folders' || procurement.folderId === filters.folderId;
 
         // New: multi-select status filtering (empty -> all)
-        const matchesStatus = statusFilters.length === 0 || statusFilters.includes(procurement.status);
+        const matchesStatus = statusFilters.length === 0 || statusFilters.some(s => {
+            if (s === 'active') return procurement.status === 'active';
+            if (s === 'processing') return procurement.status === 'archived' && procurement.storageStatus === 'Processing';
+            if (s === 'archived') return procurement.status === 'archived' && procurement.storageStatus !== 'Processing';
+            return false;
+        });
 
 
         const matchesUrgency = !filters.urgencyLevel || (filters.urgencyLevel as any) === 'all_urgency' || procurement.urgencyLevel === (filters.urgencyLevel as any);
@@ -713,9 +730,13 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
         // Type Filter (Multi-select)
         const matchesType = typeFilters.length === 0 || typeFilters.includes(procurement.procurementType || '');
 
-        // Date Range (Date Added)
+        // Date Range (Dynamic)
+        let dateToCompare = procurement.dateAdded;
+        if (filterDateType === 'deadline') dateToCompare = procurement.deadline || '';
+        else if (filterDateType === 'createdAt') dateToCompare = procurement.createdAt || procurement.dateAdded;
+
         const matchesDate = !filterDateRange || !filterDateRange.from || (
-            isWithinInterval(new Date(procurement.dateAdded), {
+            dateToCompare && isWithinInterval(new Date(dateToCompare), {
                 start: startOfDay(filterDateRange.from),
                 end: endOfDay(filterDateRange.to || filterDateRange.from)
             })
@@ -875,6 +896,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             'preBidDate', 'bidOpeningDate', 'bidEvaluationDate',
             'postQualDate', 'postQualReportDate', 'forwardedOapiDate',
             'noaDate', 'contractDate', 'ntpDate', 'awardedToDate',
+            'shoppingReceivedDate', 'shoppingBudgetCertDate', 'shoppingRfqDate',
+            'shoppingCanvassDate', 'shoppingAbstractDate', 'shoppingPurchaseOrderDate',
         ];
         const savePayload: any = { ...updatedProcurement };
         monitoringFields.forEach(field => {
@@ -1034,15 +1057,26 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
     // Updated to show: Shelf-Cabinet-Folder (Legacy) OR Box-Folder (New)
     const getLocationString = (p: Procurement) => {
+        if (p.storageStatus === 'Processing') {
+            return 'Processing';
+        }
+
+        if (!p.boxId && !p.cabinetId && !p.shelfId && !p.folderId) {
+            return 'Not yet filed';
+        }
+
         if (p.boxId) {
             // Box Storage Mode: B{code}-{Fcode} (e.g., B1-F1)
             const box = boxes.find(b => b.id === p.boxId);
             const folder = folders.find(f => f.id === p.folderId);
 
             const boxCode = box ? box.code : '?';
-            const folderCode = folder ? folder.code : '?';
 
-            return `${boxCode}-${folderCode}`;
+            if (folder && folder.code) {
+                return `${boxCode}-${folder.code}`;
+            } else {
+                return boxCode;
+            }
         } else {
             // Drawer Storage Mode: D{code}-{Ccode}-{Fcode}
             const drawer = cabinets.find(c => c.id === p.cabinetId);
@@ -1130,10 +1164,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'PR Number': p.prNumber,
                     'End User': p.division || '',
                     'ABC': p.abc ? `₱${p.abc.toLocaleString()}` : '',
-                    'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
+                    'Status': p.status === 'active' ? 'Borrowed' : p.storageStatus || 'Archived',
                     'Storage Location': getLocationString(p),
                     'Stack Number': p.stackNumber || '',
-                    'Process Status': p.procurementStatus || 'Pending',
+                    'Process Status': p.procurementStatus || 'Not yet Acted',
+                    'Urgency Level': p.urgencyLevel || 'None',
+                    'Deadline': safeFormatDate(p.deadline),
                     'Borrowed by': p.borrowedBy || '',
                     'Borrower Division': p.borrowerDivision || '',
                     'Borrowed Date': safeFormatDate(p.borrowedDate),
@@ -1176,6 +1212,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'S.': checklist.contractAgreement ? 'Yes' : '',
                     'T.': checklist.noticeToProceed ? 'Yes' : '',
                     'Date Added': safeFormatDate(p.dateAdded),
+                    'Created At': safeFormatDate(p.createdAt),
                 };
             }
             if (exportFormat === 'regular') {
@@ -1184,10 +1221,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'PR Number': p.prNumber,
                     'End User': p.division || '',
                     'ABC': p.abc ? `₱${p.abc.toLocaleString()}` : '',
-                    'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
+                    'Status': p.status === 'active' ? 'Borrowed' : p.storageStatus || 'Archived',
                     'Storage Location': getLocationString(p),
                     'Stack Number': p.stackNumber || '',
-                    'Process Status': p.procurementStatus || 'Pending',
+                    'Process Status': p.procurementStatus || 'Not yet Acted',
+                    'Urgency Level': p.urgencyLevel || 'None',
+                    'Deadline': safeFormatDate(p.deadline),
                     'Borrowed by': p.borrowedBy || '',
                     'Borrower Division': p.borrowerDivision || '',
                     'Borrowed Date': safeFormatDate(p.borrowedDate),
@@ -1235,6 +1274,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     'S.': checklist.contractAgreement ? 'Yes' : '',
                     'T.': checklist.noticeToProceed ? 'Yes' : '',
                     'Date Added': safeFormatDate(p.dateAdded),
+                    'Created At': safeFormatDate(p.createdAt),
                 };
             }
 
@@ -1244,19 +1284,25 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 'Project Name': p.projectName || '',
                 'Description': p.description,
                 'Division': p.division || '',
-                'Status': p.status === 'active' ? 'Borrowed' : 'Archived',
+                'Status': p.status === 'active' ? 'Borrowed' : p.storageStatus || 'Archived',
                 'Storage Location': getLocationString(p),
                 'Stack Number': p.stackNumber || '',
-                'Process Status': p.procurementStatus || 'Pending',
+                'Process Status': p.procurementStatus || 'Not yet Acted',
+                'Urgency Level': p.urgencyLevel || 'None',
+                'Deadline': safeFormatDate(p.deadline),
                 'Borrowed By': p.borrowedBy || '',
                 'Borrower Division': p.borrowerDivision || '',
                 'Borrowed Date': safeFormatDate(p.borrowedDate),
                 'Return By': p.returnedBy || '',
                 'Return Date': safeFormatDate(p.returnDate),
                 'Procurement Date': safeFormatDate(p.procurementDate),
+                'Supplier': p.supplier || '',
+                'Bid Amount': p.bidAmount ? `₱${p.bidAmount.toLocaleString()}` : '',
+                'ABC': p.abc ? `₱${p.abc.toLocaleString()}` : '',
                 'Tags': (p.tags || []).join(', '),
                 'Created By': p.createdByName || '',
                 'Created At': safeFormatDate(p.createdAt),
+                'Date Added': safeFormatDate(p.dateAdded),
 
                 // Documents Handed Over (Checklist A-T)
                 'A': checklist.purchaseRequest ? 'Yes' : '',
@@ -1281,21 +1327,23 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 'R': checklist.noticeOfAward ? 'Yes' : '',
                 'S': checklist.contractAgreement ? 'Yes' : '',
                 'T': checklist.noticeToProceed ? 'Yes' : '',
-
-                'Date Added': safeFormatDate(p.dateAdded),
             };
         });
 
         const ws = XLSX.utils.json_to_sheet(exportData);
-        const csv = XLSX.utils.sheet_to_csv(ws);
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `procurement_records_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-        link.click();
+        
+        // Auto-size columns based on header/content length
+        const colWidths = Object.keys(exportData[0] || {}).map(key => ({
+            wch: Math.max(key.length, ...exportData.map(row => (row[key] ? row[key].toString().length : 0))) + 2
+        }));
+        ws['!cols'] = colWidths;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Records");
+        XLSX.writeFile(wb, `procurement_records_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
 
         setIsExportModalOpen(false);
-        toast.success(`Exported ${exportData.length} records to CSV`);
+        toast.success(`Exported ${exportData.length} records to Excel (XLSX)`);
     };
 
 
@@ -1659,7 +1707,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                     </div>
 
-                    <p className="text-slate-400 mt-1">View and manage file tracking records</p>
+                    <p className="text-muted-foreground mt-1">View and manage file tracking records</p>
                 </div>
 
                 <div className="flex gap-2">
@@ -1671,15 +1719,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     Delete Selected ({selectedIds.length})
                                 </Button>
                             </AlertDialogTrigger>
-                            <AlertDialogContent className="bg-[#1e293b] border-slate-800 text-white">
+                            <AlertDialogContent className="bg-card border-border text-foreground">
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Delete {selectedIds.length} Records?</AlertDialogTitle>
-                                    <AlertDialogDescription className="text-slate-400">
+                                    <AlertDialogDescription className="text-muted-foreground">
                                         This action cannot be undone. This will permanently delete the selected procurement records.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
-                                    <AlertDialogCancel className="bg-transparent border-slate-700 text-white hover:bg-slate-800">Cancel</AlertDialogCancel>
+                                    <AlertDialogCancel className="bg-transparent border-border text-white hover:bg-muted">Cancel</AlertDialogCancel>
                                     <AlertDialogAction onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700 text-white">Delete All</AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
@@ -1723,17 +1771,17 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" className="border-slate-700 text-slate-300 hover:bg-slate-800">
+                                    <Button variant="outline" className="border-border text-muted-foreground hover:bg-muted">
                                         <Download className="mr-2 h-4 w-4" />
                                         Template
                                         <ChevronDown className="ml-2 h-4 w-4" />
                                     </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent className="bg-[#1e293b] border-slate-700 text-white">
-                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('SVP')} className="hover:bg-slate-800 cursor-pointer">
+                                <DropdownMenuContent className="bg-card border-border text-foreground">
+                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('SVP')} className="hover:bg-muted cursor-pointer">
                                         <Download className="mr-2 h-4 w-4" /> SVP Template
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('Regular Bidding')} className="hover:bg-slate-800 cursor-pointer">
+                                    <DropdownMenuItem onClick={() => handleDownloadTemplate('Regular Bidding')} className="hover:bg-muted cursor-pointer">
                                         <Download className="mr-2 h-4 w-4" /> Regular Bidding Template
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -1743,24 +1791,34 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                 </div>
             </div>
 
-            <Card className="border-none bg-[#0f172a] shadow-lg">
+            <Card className="border-none bg-background shadow-lg">
                 <CardHeader className="pb-3">
                     <div className="flex flex-col gap-4">
                         {/* Row 1: Search and Date Range */}
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="relative flex-1">
-                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Search PR Number, Project Name or description..."
-                                    className="pl-9 bg-[#1e293b] border-slate-700 text-white placeholder:text-slate-500 h-8 text-xs"
+                                    className="pl-9 bg-card border-border text-foreground placeholder:text-muted-foreground h-8 text-xs"
                                     value={filters.search}
                                     onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                                 />
                             </div>
                             {/* Date Range Filter (Typable) */}
-                            <div className="flex items-center gap-2 bg-[#1e293b] rounded-md border border-slate-700 p-1 min-w-fit">
-                                <div className="flex items-center gap-1 px-2">
-                                    <span className="text-xs text-slate-400">From:</span>
+                            <div className="flex items-center gap-2 bg-card rounded-md border border-border p-1 min-w-fit">
+                                <Select value={filterDateType} onValueChange={(val: any) => setFilterDateType(val)}>
+                                    <SelectTrigger className="w-[140px] h-6 text-xs border-none bg-transparent focus:ring-0">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-card border-border text-foreground">
+                                        <SelectItem value="createdAt">Date Created</SelectItem>
+                                        <SelectItem value="deadline">Procurement Deadline</SelectItem>
+                                        <SelectItem value="dateAdded">Record Date</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-1 px-2 border-l border-border">
+                                    <span className="text-xs text-muted-foreground">From:</span>
                                     <input
                                         type="date"
                                         className="bg-transparent border-none text-white text-xs focus:ring-0 w-[110px] h-6"
@@ -1768,8 +1826,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                         onChange={(e) => setFilterDateRange(prev => ({ from: e.target.value ? new Date(e.target.value) : undefined, to: prev?.to }))}
                                     />
                                 </div>
-                                <div className="flex items-center gap-1 px-2 border-l border-slate-700">
-                                    <span className="text-xs text-slate-400">To:</span>
+                                <div className="flex items-center gap-1 px-2 border-l border-border">
+                                    <span className="text-xs text-muted-foreground">To:</span>
                                     <input
                                         type="date"
                                         className="bg-transparent border-none text-white text-xs focus:ring-0 w-[110px] h-6"
@@ -1783,7 +1841,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         {/* Row 2: Location Filters */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
                             {/* Box Filter */}
-                            <div className="bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="bg-card rounded-md border border-border p-1">
                                 <Select
                                     value={filters.boxId || "all"}
                                     onValueChange={(val) => setFilters(prev => ({ ...prev, boxId: val === "all" ? "" : val, cabinetId: "", shelfId: "", folderId: "" }))}
@@ -1792,7 +1850,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <SelectTrigger className="w-full border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="All Boxes" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="all">All Boxes</SelectItem>
                                         {boxes.map((b) => (
                                             <SelectItem key={b.id} value={b.id}>{b.code} - {b.name}</SelectItem>
@@ -1802,7 +1860,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                             </div>
 
                             {/* Cabinet Filter */}
-                            <div className="bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="bg-card rounded-md border border-border p-1">
                                 <Select
                                     value={filters.cabinetId || "all"}
                                     onValueChange={(val) => setFilters(prev => ({ ...prev, cabinetId: val === "all" ? "" : val, shelfId: "", folderId: "", boxId: "" }))} // Clear box if shelf selected
@@ -1811,7 +1869,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <SelectTrigger className="w-full border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="All Drawers" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="all">All Drawers</SelectItem>
                                         {cabinets.map((c) => (
                                             <SelectItem key={c.id} value={c.id}>{c.code} - {c.name}</SelectItem>
@@ -1820,7 +1878,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 </Select>
                             </div>
 
-                            <div className="bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="bg-card rounded-md border border-border p-1">
                                 <Select
                                     value={filters.shelfId}
                                     onValueChange={(value) => setFilters({
@@ -1833,7 +1891,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <SelectTrigger className="w-full border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="Cabinet" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="all_shelves">All Cabinets</SelectItem>
                                         {filterAvailableShelves.map((s) => (
                                             <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
@@ -1842,7 +1900,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 </Select>
                             </div>
 
-                            <div className="bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="bg-card rounded-md border border-border p-1">
                                 <Select
                                     value={filters.folderId}
                                     onValueChange={(value) => setFilters({ ...filters, folderId: value })}
@@ -1851,7 +1909,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <SelectTrigger className="w-full border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="Folder" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="all_folders">All Folders</SelectItem>
                                         {filterAvailableFolders.map((f) => (
                                             <SelectItem key={f.id} value={f.id}>{f.code} - {f.name}</SelectItem>
@@ -1864,7 +1922,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         {/* Row 3: Properties & Sort */}
                         <div className="flex flex-wrap gap-2 items-center">
                             {/* STATUS multi-select dropdown */}
-                            <div className="flex-1 min-w-[120px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="flex-1 min-w-[120px] bg-card rounded-md border border-border p-1">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" className="w-full flex justify-between items-center text-white px-3 py-1 h-6 text-xs">
@@ -1879,8 +1937,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             <ChevronDown className="h-4 w-4 opacity-50" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start" className="bg-[#1e293b] border-slate-700 text-white p-3 w-56">
-                                        <div className="mb-2 text-slate-300 text-sm">Select status</div>
+                                    <DropdownMenuContent align="start" className="bg-card border-border text-foreground p-3 w-56">
+                                        <div className="mb-2 text-muted-foreground text-sm">Select status</div>
                                         <div className="flex flex-col gap-2 max-h-48 overflow-auto">
                                             {statusOptions.map((status) => (
                                                 <div key={status} className="flex items-center gap-2">
@@ -1892,7 +1950,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleStatusFilter(status)}
-                                                        className="text-sm text-slate-200 text-left w-full"
+                                                        className="text-sm text-foreground text-left w-full"
                                                     >
                                                         {getStatusLabel(status)}
                                                     </button>
@@ -1906,7 +1964,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
 
                             {/* Process Status Filter (Multi-select) */}
-                            <div className="flex-1 min-w-[140px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="flex-1 min-w-[140px] bg-card rounded-md border border-border p-1">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" className="w-full flex justify-between items-center text-white px-3 py-1 h-6 text-xs">
@@ -1921,8 +1979,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             <ChevronDown className="h-4 w-4 opacity-50" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start" className="bg-[#1e293b] border-slate-700 text-white p-3 w-56">
-                                        <div className="mb-2 text-slate-300 text-sm">Select process status</div>
+                                    <DropdownMenuContent align="start" className="bg-card border-border text-foreground p-3 w-56">
+                                        <div className="mb-2 text-muted-foreground text-sm">Select process status</div>
                                         <div className="flex flex-col gap-2">
                                             {PROCESS_STATUS_OPTIONS.map((status) => (
                                                 <div key={status} className="flex items-center gap-2">
@@ -1934,7 +1992,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     <button
                                                         type="button"
                                                         onClick={() => toggleProcurementStatusFilter(status)}
-                                                        className="text-sm text-slate-200 text-left w-full"
+                                                        className="text-sm text-foreground text-left w-full"
                                                     >
                                                         {status}
                                                     </button>
@@ -1947,7 +2005,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
 
                             {/* Division Filter */}
-                            <div className="flex-1 min-w-[150px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="flex-1 min-w-[150px] bg-card rounded-md border border-border p-1">
                                 <Select
                                     value={filterDivision}
                                     onValueChange={setFilterDivision}
@@ -1955,7 +2013,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     <SelectTrigger className="w-full border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="All Divisions" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="all_divisions">All Divisions</SelectItem>
                                         {divisions.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })).map((d) => (
                                             <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
@@ -1966,7 +2024,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                             {/* Type Filter (Multi-select) - OR specific column toggles? */}
                             {!forcedType && (
-                                <div className="flex-1 min-w-[120px] bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                                <div className="flex-1 min-w-[120px] bg-card rounded-md border border-border p-1">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" className="w-full flex justify-between items-center text-white px-3 py-1 h-6 text-xs">
@@ -1981,8 +2039,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 <ChevronDown className="h-4 w-4 opacity-50" />
                                             </Button>
                                         </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="start" className="bg-[#1e293b] border-slate-700 text-white p-3 w-56">
-                                            <div className="mb-2 text-slate-300 text-sm">Select type</div>
+                                        <DropdownMenuContent align="start" className="bg-card border-border text-foreground p-3 w-56">
+                                            <div className="mb-2 text-muted-foreground text-sm">Select type</div>
                                             <div className="flex flex-col gap-2 max-h-48 overflow-auto">
                                                 {typeOptions.map((type) => (
                                                     <div key={type} className="flex items-center gap-2">
@@ -1994,7 +2052,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         <button
                                                             type="button"
                                                             onClick={() => toggleTypeFilter(type)}
-                                                            className="text-sm text-slate-200 text-left w-full"
+                                                            className="text-sm text-foreground text-left w-full"
                                                         >
                                                             {type}
                                                         </button>
@@ -2007,12 +2065,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                             )}
 
                             {/* SORT controls */}
-                            <div className="flex-none flex items-center gap-2 bg-[#1e293b] rounded-md border border-slate-700 p-1">
+                            <div className="flex-none flex items-center gap-2 bg-card rounded-md border border-border p-1">
                                 <Select value={sortField} onValueChange={(value) => setSortField(value as 'name' | 'prNumber' | 'date' | 'stackNumber')}>
                                     <SelectTrigger className="w-[120px] border-none bg-transparent text-white focus:ring-0 h-6 text-xs">
                                         <SelectValue placeholder="Sort by" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                    <SelectContent className="bg-card border-border text-foreground">
                                         <SelectItem value="name">Name</SelectItem>
                                         <SelectItem value="prNumber">PR Number</SelectItem>
                                         <SelectItem value="date">Date Added</SelectItem>
@@ -2023,7 +2081,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     variant="ghost"
                                     size="icon"
                                     onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                                    className="h-6 w-8 text-slate-400 hover:text-white"
+                                    className="h-6 w-8 text-muted-foreground hover:text-white"
                                     title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
                                 >
                                     {sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
@@ -2033,7 +2091,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                             <Button
                                 variant="outline"
                                 onClick={clearFilters}
-                                className="bg-[#1e293b] border-slate-700 text-slate-400 hover:text-white ml-auto h-8 px-3"
+                                className="bg-card border-border text-muted-foreground hover:text-white ml-auto h-8 px-3"
                                 title="Clear Filters"
                             >
                                 <FilterX className="h-4 w-4 mr-2" />
@@ -2043,10 +2101,10 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border border-slate-800 overflow-x-auto">
+                    <div className="rounded-md border border-border overflow-x-auto">
                         <Table className="text-xs">
                             <TableHeader>
-                                <TableRow className="border-slate-800 hover:bg-transparent">
+                                <TableRow className="border-border hover:bg-transparent">
                                     <TableHead className="w-[50px]">
                                         {!['viewer', 'archiver'].includes(user?.role || '') && (
                                             <Checkbox
@@ -2056,24 +2114,24 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             />
                                         )}
                                     </TableHead>
-                                    <TableHead className="text-slate-300 w-[100px]">{forcedType === 'Regular Bidding' ? 'IB Number' : 'PR Number'}</TableHead>
-                                    <TableHead className="text-slate-300">Project Title (Particulars)</TableHead>
-                                    {forcedType === 'Regular Bidding' && <TableHead className="text-slate-300">ABC</TableHead>}
-                                    <TableHead className="text-slate-300 w-[90px]">End User</TableHead>
-                                    {!forcedType && <TableHead className="text-slate-300 w-[100px]">Type</TableHead>}
-                                    <TableHead className="text-slate-300 w-[100px]">Location</TableHead>
-                                    <TableHead className="text-center text-slate-300 w-[70px]">Stack #</TableHead>
-                                    {/* <TableHead className="text-slate-300 w-[100px]">Urgency / Deadline</TableHead> */}
-                                    <TableHead className="text-slate-300 w-[120px]">Current Progress</TableHead>
-                                    <TableHead className="text-slate-300 w-[110px]">Status</TableHead>
-                                    <TableHead className="text-slate-300 w-[120px]">Date Progress Updated</TableHead>
-                                    <TableHead className="text-right text-slate-300 w-[140px]">Actions</TableHead>
+                                    <TableHead className="text-muted-foreground w-[100px]">{forcedType === 'Regular Bidding' ? 'IB Number' : 'PR Number'}</TableHead>
+                                    <TableHead className="text-muted-foreground">Project Title (Particulars)</TableHead>
+                                    {forcedType === 'Regular Bidding' && <TableHead className="text-muted-foreground">ABC</TableHead>}
+                                    <TableHead className="text-muted-foreground w-[90px]">End User</TableHead>
+                                    {!forcedType && <TableHead className="text-muted-foreground w-[100px]">Type</TableHead>}
+                                    <TableHead className="text-muted-foreground w-[100px]">Location</TableHead>
+                                    <TableHead className="text-center text-muted-foreground w-[70px]">Stack #</TableHead>
+                                    {/* <TableHead className="text-muted-foreground w-[100px]">Urgency / Deadline</TableHead> */}
+                                    <TableHead className="text-muted-foreground w-[120px]">Current Progress</TableHead>
+                                    <TableHead className="text-muted-foreground w-[110px]">Status</TableHead>
+                                    <TableHead className="text-muted-foreground w-[120px]">Date Progress Updated</TableHead>
+                                    <TableHead className="text-right text-muted-foreground w-[140px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {paginatedProcurements.length === 0 ? (
-                                    <TableRow className="border-slate-800">
-                                        <TableCell colSpan={13} className="h-24 text-center text-slate-500">
+                                    <TableRow className="border-border">
+                                        <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
                                             No records found.
                                         </TableCell>
                                     </TableRow>
@@ -2083,16 +2141,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                                         // Current Stage (Last Completed Step)
                                         const getLastStage = (p: Procurement) => {
-                                            if (p.procurementType === 'SVP') {
-                                                if (p.forwardedGsdDate) return 'Forwarded GSD for P.O.';
-                                                if (p.bacResolutionDate) return 'BAC Resolution';
-                                                if (p.rfqOpeningDate) return 'RFQ Opening';
-                                                if (p.rfqCanvassDate) return 'RFQ for Canvass';
-                                                if (p.publishedDate) return 'Published';
-                                                if (p.prDeliberatedDate) return 'PR Deliberated';
-                                                if (p.receivedPrDate) return 'Received PR for Action';
-                                                return 'Not yet Acted';
-                                            } else {
+                                            if (p.procurementType === 'Regular Bidding') {
                                                 // Regular Bidding - Check in reverse chronological order (latest first)
                                                 if (p.awardedToDate) return 'Awarded to Supplier';
                                                 if (p.forwardedOapiDate) return 'To OAPIA';
@@ -2108,23 +2157,42 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 if (p.prDeliberatedDate) return 'PR Deliberated';
                                                 if (p.receivedPrDate) return 'Received PR for Action';
                                                 return 'Not yet Acted';
+                                            } else if (p.procurementType === 'Shopping') {
+                                                if (p.shoppingPurchaseOrderDate) return 'PO Issued';
+                                                if (p.shoppingAbstractDate) return 'Abstract';
+                                                if (p.shoppingCanvassDate) return 'Canvass / Price Inquiry';
+                                                if (p.shoppingRfqDate) return 'RFQ Prep';
+                                                if (p.shoppingBudgetCertDate) return 'Budget Cert';
+                                                if (p.shoppingReceivedDate) return 'Received PR for Action';
+                                                return 'Not yet Acted';
+                                            } else {
+                                                // SVP
+                                                if (p.poNtpForwardedGsdDate) return 'Add PO/NTP to GSD';
+                                                if (p.forwardedGsdDate) return 'Forwarded GSD for P.O.';
+                                                if (p.bacResolutionDate) return 'BAC Resolution';
+                                                if (p.rfqOpeningDate) return 'RFQ Opening';
+                                                if (p.rfqCanvassDate) return 'RFQ for Canvass';
+                                                if (p.publishedDate) return 'Published';
+                                                if (p.prDeliberatedDate) return 'PR Deliberated';
+                                                if (p.receivedPrDate) return 'Received PR for Action';
+                                                return 'Not yet Acted';
                                             }
                                         };
                                         const currentStage = getLastStage(procurement);
 
                                         // Determine Effective Status for Coloring
-                                        // User logic: "Completed(Green), In Progress(Yellow), Returned PR to EU(Purple), Not yet Acted(Gray), Failure(Red), Cancelled(Red Orange)"
+                                        // User logic: "Completed(Green), Processing(Yellow), Returned PR to EU(Purple), Not yet Acted(Gray), Failure(Red), Cancelled(Red Orange)"
                                         let effectiveStatus = pStatus || 'Not yet Acted';
 
-                                        // If status is Pending (legacy), treat as In Progress
-                                        if (pStatus === 'Pending') effectiveStatus = 'In Progress';
+                                        // If status is Pending (legacy), treat as Processing
+                                        if (pStatus === 'Pending') effectiveStatus = 'Processing';
 
                                         // Row Background & Border Classes
                                         let bgClass = '';
                                         let borderClass = '';
                                         let textStatusClass = '';
 
-                                        // Pure vivid colors: Completed=Green, In Progress=Yellow, Returned PR=Purple, Failure=Red, Cancelled=Orange, Not yet Acted=Gray
+                                        // Pure vivid colors: Completed=Green, Processing=Yellow, Returned PR=Purple, Failure=Red, Cancelled=Orange, Not yet Acted=Gray
                                         switch (effectiveStatus) {
                                             case 'Completed':
                                             case 'Success': // Legacy
@@ -2132,7 +2200,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 borderClass = 'border-l-4 border-l-green-500';
                                                 textStatusClass = 'text-green-400 font-semibold';
                                                 break;
-                                            case 'In Progress':
+                                            case 'Processing':
+                                            case 'In Progress': // Legacy data support
                                                 bgClass = 'bg-yellow-400/20 hover:bg-yellow-400/30';
                                                 borderClass = 'border-l-4 border-l-yellow-400';
                                                 textStatusClass = 'text-yellow-400 font-semibold';
@@ -2158,7 +2227,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             default:
                                                 bgClass = 'bg-slate-500/10 hover:bg-slate-500/20';
                                                 borderClass = 'border-l-4 border-l-slate-500';
-                                                textStatusClass = 'text-slate-400';
+                                                textStatusClass = 'text-muted-foreground';
                                                 break;
                                         }
 
@@ -2167,7 +2236,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                         const divAcronym = div ? div.abbreviation : (procurement.division || '-');
 
                                         return (
-                                            <TableRow key={procurement.id} className={`border-slate-800 transition-colors ${bgClass}`}>
+                                            <TableRow key={procurement.id} className={`border-border transition-colors ${bgClass}`}>
                                                 <TableCell className={`${borderClass}`}>
                                                     {!['viewer', 'archiver'].includes(user?.role || '') && (
                                                         <Checkbox
@@ -2180,20 +2249,20 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 <TableCell className="font-medium text-white text-xs w-[140px]">
                                                     {procurement.prNumber}
                                                 </TableCell>
-                                                <TableCell className="max-w-[250px] truncate text-slate-300 font-medium" title={procurement.projectName || ''}>
+                                                <TableCell className="max-w-[250px] truncate text-muted-foreground font-medium" title={procurement.projectName || ''}>
                                                     {procurement.projectName || '-'}
-                                                    <div className="text-[10px] text-slate-500 italic truncate">{procurement.description}</div>
+                                                    <div className="text-[10px] text-muted-foreground italic truncate">{procurement.description}</div>
                                                 </TableCell>
                                                 {forcedType === 'Regular Bidding' && (
-                                                    <TableCell className="text-slate-300">
+                                                    <TableCell className="text-muted-foreground">
                                                         {procurement.abc ? `₱${procurement.abc.toLocaleString()}` : '-'}
                                                     </TableCell>
                                                 )}
-                                                <TableCell className="text-slate-300 text-xs" title={procurement.division || ''}>
+                                                <TableCell className="text-muted-foreground text-xs" title={procurement.division || ''}>
                                                     {divAcronym}
                                                 </TableCell>
                                                 {!forcedType && (
-                                                    <TableCell className="text-slate-300">
+                                                    <TableCell className="text-muted-foreground">
                                                         {procurement.procurementType === 'Regular Bidding' ? (
                                                             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                                                 Regular
@@ -2203,21 +2272,21 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                                 SVP
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-500/10 text-muted-foreground border border-slate-500/20">
                                                                 {procurement.procurementType || '-'}
                                                             </span>
                                                         )}
                                                     </TableCell>
                                                 )}
                                                 <TableCell>
-                                                    <div className="flex items-center gap-1 text-slate-300">
-                                                        <span className="font-mono text-xs bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-700/50">
+                                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                                        <span className="font-mono text-xs bg-slate-800/50 px-1.5 py-0.5 rounded border border-border/50">
                                                             {getLocationString(procurement)}
                                                         </span>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <span className="text-slate-400 text-xs font-mono">
+                                                    <span className="text-muted-foreground text-xs font-mono">
                                                         {procurement.stackNumber ? `${procurement.stackNumber}` : '-'}
                                                     </span>
                                                 </TableCell>
@@ -2225,13 +2294,13 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     <div className="flex flex-col gap-1">
                                                         <span className={`inline-flex w-max items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${procurement.urgencyLevel === 'Critical' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                                                                 procurement.urgencyLevel === 'High' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                                                    procurement.urgencyLevel === 'Low' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' :
+                                                                    procurement.urgencyLevel === 'Low' ? 'bg-slate-500/10 text-muted-foreground border-slate-500/20' :
                                                                         'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                                             }`}>
                                                             {procurement.urgencyLevel || 'Medium'}
                                                         </span>
                                                         {procurement.deadline && (
-                                                            <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                                                                 <CalendarIcon className="w-3 h-3 inline mr-1" />
                                                                 {format(new Date(procurement.deadline), 'MMM d, yyyy')}
                                                             </span>
@@ -2246,25 +2315,28 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 </TableCell>
                                                 <TableCell>
                                                     <Select
-                                                        value={procurement.status}
-                                                        onValueChange={(value) => handleStatusChange(procurement, value as ProcurementStatus)}
+                                                        value={procurement.status === 'active' ? 'active' : (procurement.storageStatus === 'Processing' ? 'processing' : 'archived')}
+                                                        onValueChange={(value) => handleStatusChange(procurement, value as any)}
                                                         disabled={['viewer', 'archiver'].includes(user?.role || '')}
                                                     >
-                                                        <SelectTrigger className={`w-[110px] h-7 text-xs border ${procurement.status === 'active'
-                                                            ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
-                                                            : 'bg-slate-700/50 text-slate-300 border-slate-700'
+                                                        <SelectTrigger className={`w-[115px] h-7 text-xs border ${procurement.status === 'active'
+                                                                ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                                : procurement.storageStatus === 'Processing'
+                                                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                                    : 'bg-slate-700/50 text-muted-foreground border-border'
                                                             }`}>
                                                             <SelectValue>
-                                                                {procurement.status === 'active' ? 'Borrowed' : 'In Storage'}
+                                                                {procurement.status === 'active' ? 'Borrowed' : procurement.storageStatus === 'Processing' ? 'Processing' : 'In Storage'}
                                                             </SelectValue>
                                                         </SelectTrigger>
                                                         <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
                                                             <SelectItem value="active" className="text-orange-400 focus:text-orange-400 text-xs">Borrowed</SelectItem>
+                                                            <SelectItem value="processing" className="text-blue-400 focus:text-blue-400 text-xs">Processing</SelectItem>
                                                             <SelectItem value="archived" className="text-slate-300 focus:text-white text-xs">In Storage</SelectItem>
                                                         </SelectContent>
                                                     </Select>
                                                 </TableCell>
-                                                <TableCell className="text-slate-400">
+                                                <TableCell className="text-muted-foreground">
                                                     {(() => {
                                                         const latest = getLatestActionDate(procurement);
                                                         return latest ? format(latest, 'MMM d, yyyy') : '-';
@@ -2297,7 +2369,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                             variant="ghost"
                                                             size="icon"
                                                             onClick={() => setViewProcurement(procurement)}
-                                                            className="h-8 w-8 text-slate-400 hover:text-white hover:bg-slate-700/50"
+                                                            className="h-8 w-8 text-muted-foreground hover:text-white hover:bg-slate-700/50"
                                                             title="View Details"
                                                         >
                                                             <Eye className="h-4 w-4" />
@@ -2324,15 +2396,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                                             <Trash2 className="h-4 w-4" />
                                                                         </Button>
                                                                     </AlertDialogTrigger>
-                                                                    <AlertDialogContent className="bg-[#1e293b] border-slate-800 text-white">
+                                                                    <AlertDialogContent className="bg-card border-border text-foreground">
                                                                         <AlertDialogHeader>
                                                                             <AlertDialogTitle>Delete Record?</AlertDialogTitle>
-                                                                            <AlertDialogDescription className="text-slate-400">
+                                                                            <AlertDialogDescription className="text-muted-foreground">
                                                                                 This action cannot be undone. This will permanently delete the procurement record.
                                                                             </AlertDialogDescription>
                                                                         </AlertDialogHeader>
                                                                         <AlertDialogFooter>
-                                                                            <AlertDialogCancel className="bg-transparent border-slate-700 text-white hover:bg-slate-800">Cancel</AlertDialogCancel>
+                                                                            <AlertDialogCancel className="bg-transparent border-border text-white hover:bg-muted">Cancel</AlertDialogCancel>
                                                                             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 text-white">Delete</AlertDialogAction>
                                                                         </AlertDialogFooter>
                                                                     </AlertDialogContent>
@@ -2357,37 +2429,37 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-10 w-10 rounded-full bg-[#1e293b] border-slate-700 shadow-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all hover:scale-105"
+                                    className="h-10 w-10 rounded-full bg-card border-border shadow-lg hover:bg-muted text-muted-foreground hover:text-white transition-all hover:scale-105"
                                 >
                                     <Info className="h-5 w-5" />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 bg-[#1e293b] border-slate-700 p-4 shadow-xl mb-2 mr-2" align="end" side="top">
-                                <h4 className="font-semibold text-white mb-3 text-sm border-b border-slate-700 pb-2">Status Legend</h4>
+                            <PopoverContent className="w-80 bg-card border-border p-4 shadow-xl mb-2 mr-2" align="end" side="top">
+                                <h4 className="font-semibold text-white mb-3 text-sm border-b border-border pb-2">Status Legend</h4>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">Completed</span>
+                                        <span className="text-xs text-muted-foreground">Completed</span>
                                     </div>
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">In Progress</span>
+                                        <span className="text-xs text-muted-foreground">Processing</span>
                                     </div>
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">Returned PR to EU</span>
+                                        <span className="text-xs text-muted-foreground">Returned PR to EU</span>
                                     </div>
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-slate-500 shadow-[0_0_8px_rgba(100,116,139,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">Not yet Acted</span>
+                                        <span className="text-xs text-muted-foreground">Not yet Acted</span>
                                     </div>
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">Failure</span>
+                                        <span className="text-xs text-muted-foreground">Failure</span>
                                     </div>
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-3 h-3 rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.5)]"></div>
-                                        <span className="text-xs text-slate-300">Cancelled</span>
+                                        <span className="text-xs text-muted-foreground">Cancelled</span>
                                     </div>
                                 </div>
                             </PopoverContent>
@@ -2395,8 +2467,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                     </div>
                 </CardContent>
                 {totalPages > 1 && (
-                    <div className="p-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="text-sm text-slate-400">
+                    <div className="p-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-sm text-muted-foreground">
                             Showing {paginatedProcurements.length} of {filteredProcurements.length} records
                             <span className="mx-2">•</span>
                             Page {currentPage} of {totalPages}
@@ -2404,7 +2476,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         <div className="flex items-center gap-4">
                             <div className="flex items-center gap-2">
-                                <span className="text-sm text-slate-400">Go to:</span>
+                                <span className="text-sm text-muted-foreground">Go to:</span>
                                 <Input
                                     type="number"
                                     min={1}
@@ -2412,14 +2484,14 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     value={jumpPage}
                                     onChange={(e) => setJumpPage(e.target.value)}
                                     placeholder="#"
-                                    className="w-16 h-8 bg-[#0f172a] border-slate-700 text-white text-xs"
+                                    className="w-16 h-8 bg-background border-border text-foreground text-xs"
                                     onKeyDown={(e) => e.key === 'Enter' && handleJumpToPage()}
                                 />
                                 <Button
                                     variant="outline"
                                     size="sm"
                                     onClick={handleJumpToPage}
-                                    className="h-8 px-2 bg-[#1e293b] border-slate-700 text-white hover:bg-slate-800"
+                                    className="h-8 px-2 bg-card border-border text-foreground hover:bg-muted"
                                 >
                                     Go
                                 </Button>
@@ -2431,7 +2503,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     size="sm"
                                     onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                                     disabled={currentPage === 1}
-                                    className="bg-[#1e293b] border-slate-700 text-white disabled:opacity-50"
+                                    className="bg-card border-border text-foreground disabled:opacity-50"
                                 >
                                     <ChevronLeft className="h-4 w-4 mr-2" />
                                     Previous
@@ -2441,7 +2513,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     size="sm"
                                     onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                                     disabled={currentPage === totalPages}
-                                    className="bg-[#1e293b] border-slate-700 text-white disabled:opacity-50"
+                                    className="bg-card border-border text-foreground disabled:opacity-50"
                                 >
                                     Next
                                     <ChevronRight className="h-4 w-4 ml-2" />
@@ -2454,10 +2526,10 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
             {/* Edit Dialog - Fixed Layout */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="border-slate-800 bg-[#0f172a] text-white max-w-7xl max-h-[90vh] flex flex-col p-0">
+                <DialogContent className="border-border bg-background text-white max-w-7xl max-h-[90vh] flex flex-col p-0">
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle>Edit Record</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Update the procurement details and location.
                         </DialogDescription>
                     </DialogHeader>
@@ -2470,33 +2542,33 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                         {!['Attendance Sheets', 'Others'].includes(editingProcurement.procurementType || '') && (
                                             <>
                                                 <div className="flex items-center justify-between mb-2">
-                                                    <Label className="text-slate-300">PR Number Construction</Label>
-                                                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700 text-xs">
+                                                    <Label className="text-muted-foreground">PR Number Construction</Label>
+                                                    <div className="flex bg-card p-1 rounded-lg border border-border text-xs">
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditPrFormat('old')}
-                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'old' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'old' ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                                         >
                                                             Old (Div-Mon-Yr-#)
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => setEditPrFormat('new')}
-                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'new' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                                            className={`px-3 py-1 rounded-md font-medium transition-all ${editPrFormat === 'new' ? 'bg-purple-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                                                         >
                                                             New (Yr-Mon-#)
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <div className={`grid gap-2 items-end p-3 rounded-lg bg-[#1e293b]/50 border border-slate-700/50 ${editPrFormat === 'old' ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                                                <div className={`grid gap-2 items-end p-3 rounded-lg bg-card/50 border border-border/50 ${editPrFormat === 'old' ? 'grid-cols-4' : 'grid-cols-3'}`}>
                                                     {editPrFormat === 'old' && (
                                                         <div className="space-y-1">
-                                                            <Label className="text-xs text-slate-400">Division</Label>
+                                                            <Label className="text-xs text-muted-foreground">Division</Label>
                                                             <Select value={editDivisionId} onValueChange={setEditDivisionId}>
-                                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs">
+                                                                <SelectTrigger className="bg-card border-border text-foreground h-8 text-xs">
                                                                     <SelectValue placeholder="Div" />
                                                                 </SelectTrigger>
-                                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                                                <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                                                     {divisions.map(div => (
                                                                         <SelectItem key={div.id} value={div.id}>{div.abbreviation}</SelectItem>
                                                                     ))}
@@ -2505,12 +2577,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         </div>
                                                     )}
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs text-slate-400">Month</Label>
+                                                        <Label className="text-xs text-muted-foreground">Month</Label>
                                                         <Select value={editPrMonth} onValueChange={setEditPrMonth}>
-                                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs">
+                                                            <SelectTrigger className="bg-card border-border text-foreground h-8 text-xs">
                                                                 <SelectValue />
                                                             </SelectTrigger>
-                                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                                            <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                                                 {MONTHS.map(m => (
                                                                     <SelectItem key={m.value} value={m.value}>{m.value}</SelectItem>
                                                                 ))}
@@ -2518,25 +2590,25 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         </Select>
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs text-slate-400">Year</Label>
+                                                        <Label className="text-xs text-muted-foreground">Year</Label>
                                                         <Input
                                                             value={editPrYear}
                                                             onChange={(e) => setEditPrYear(e.target.value)}
-                                                            className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs"
+                                                            className="bg-card border-border text-foreground h-8 text-xs"
                                                             maxLength={4}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
-                                                        <Label className="text-xs text-slate-400">Seq</Label>
+                                                        <Label className="text-xs text-muted-foreground">Seq</Label>
                                                         <Input
                                                             value={editPrSequence}
                                                             onChange={(e) => setEditPrSequence(e.target.value)}
-                                                            className="bg-[#1e293b] border-slate-700 text-white h-8 text-xs"
+                                                            className="bg-card border-border text-foreground h-8 text-xs"
                                                             maxLength={7}
                                                         />
                                                     </div>
                                                 </div>
-                                                <div className="mt-1 text-xs text-slate-500 flex flex-col gap-1">
+                                                <div className="mt-1 text-xs text-muted-foreground flex flex-col gap-1">
                                                     <div className="flex justify-between items-center">
                                                         <span>Preview: <span className="font-mono text-emerald-400 font-bold ml-1">
                                                             {editPrFormat === 'old'
@@ -2551,8 +2623,8 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     <div className="flex justify-start">
                                                         {isCheckingEditPr ? (
                                                             <div className="flex items-center gap-1.5">
-                                                                <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
-                                                                <span className="text-[10px] text-slate-400 italic">Validating ID...</span>
+                                                                <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                                                                <span className="text-[10px] text-muted-foreground italic">Validating ID...</span>
                                                             </div>
                                                         ) : (editPrExists !== null && (
                                                             editPrExists
@@ -2565,42 +2637,42 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                         )}
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Project Name</Label>
+                                        <Label className="text-muted-foreground">Project Name</Label>
                                         <Input
                                             value={editingProcurement.projectName || ''}
                                             onChange={(e) => setEditingProcurement({ ...editingProcurement, projectName: e.target.value })}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
+                                            className="bg-card border-border text-foreground"
                                         />
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Procurement Date</Label>
+                                        <Label className="text-muted-foreground">Procurement Date</Label>
                                         <Input
                                             type="date"
                                             value={editingProcurement.procurementDate ? format(new Date(editingProcurement.procurementDate), 'yyyy-MM-dd') : ''}
                                             onChange={(e) => setEditingProcurement({ ...editingProcurement, procurementDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
+                                            className="bg-card border-border text-foreground"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Date Added</Label>
+                                        <Label className="text-muted-foreground">Date Added</Label>
                                         <Input
                                             type="date"
                                             value={format(new Date(editingProcurement.dateAdded), 'yyyy-MM-dd')}
                                             onChange={(e) => setEditingProcurement({ ...editingProcurement, dateAdded: e.target.value ? new Date(e.target.value).toISOString() : editingProcurement.dateAdded })}
-                                            className="bg-[#1e293b] border-slate-700 text-white"
+                                            className="bg-card border-border text-foreground"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">End User (Division)</Label>
+                                        <Label className="text-muted-foreground">End User (Division)</Label>
                                         <Select
                                             value={editingProcurement.division || ''}
                                             onValueChange={(val) => setEditingProcurement({ ...editingProcurement, division: val })}
                                         >
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                            <SelectTrigger className="bg-card border-border text-foreground">
                                                 <SelectValue placeholder="Select Division" />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                            <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                                 {divisions.sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
                                                     <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
                                                 ))}
@@ -2610,11 +2682,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label className="text-slate-300">Project Description</Label>
+                                    <Label className="text-muted-foreground">Project Description</Label>
                                     <Textarea
                                         value={editingProcurement.description}
                                         onChange={(e) => setEditingProcurement({ ...editingProcurement, description: e.target.value })}
-                                        className="bg-[#1e293b] border-slate-700 text-white"
+                                        className="bg-card border-border text-foreground"
                                         rows={3}
                                     />
                                 </div>
@@ -2623,15 +2695,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     {/* Procurement Type Dropdown - Restricted or Full based on type */}
                                     {!['Attendance Sheets', 'Others'].includes(editingProcurement.procurementType || '') && (
                                         <div className="space-y-2">
-                                            <Label className="text-slate-300">Procurement Type</Label>
+                                            <Label className="text-muted-foreground">Procurement Type</Label>
                                             <Select
                                                 value={(editingProcurement.procurementType || 'Regular Bidding') as any}
                                                 onValueChange={(value) => setEditingProcurement({ ...editingProcurement, procurementType: value as any })}
                                             >
-                                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                                <SelectTrigger className="bg-card border-border text-foreground">
                                                     <SelectValue />
                                                 </SelectTrigger>
-                                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                                <SelectContent className="bg-card border-border text-foreground">
                                                     {['Regular Bidding', 'SVP', 'Receipt', 'Official Receipt'].includes(editingProcurement.procurementType || 'Regular Bidding') ? (
                                                         <>
                                                             <SelectItem value="Regular Bidding">Regular Bidding</SelectItem>
@@ -2656,17 +2728,17 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     )}
 
                                     <div className="space-y-2 mb-5">
-                                        <Label className="text-slate-300">Process Status</Label>
+                                        <Label className="text-muted-foreground">Process Status</Label>
                                         <Select
                                             value={editingProcurement.procurementStatus || 'Not yet Acted'}
                                             onValueChange={(value) => setEditingProcurement({ ...editingProcurement, procurementStatus: value })}
                                         >
-                                            <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                            <SelectTrigger className="bg-card border-border text-foreground">
                                                 <SelectValue />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                            <SelectContent className="bg-card border-border text-foreground">
                                                 <SelectItem value="Completed">Completed</SelectItem>
-                                                <SelectItem value="In Progress">In Progress</SelectItem>
+                                                <SelectItem value="Processing">Processing</SelectItem>
                                                 <SelectItem value="Returned PR to EU">Returned PR to EU</SelectItem>
                                                 <SelectItem value="Not yet Acted">Not yet Acted</SelectItem>
                                                 <SelectItem value="Failure">Failure</SelectItem>
@@ -2678,71 +2750,84 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     {/* Financial Information */}
                                     <div className="grid gap-4 md:grid-cols-2">
                                         <div className="space-y-2">
-                                            <Label className="text-slate-300">ABC (Approved Budget for Contract)</Label>
+                                            <Label className="text-muted-foreground">ABC (Approved Budget for Contract)</Label>
                                             <Input
                                                 type="text"
                                                 value={getDisplayValue(String(editingProcurement.abc || ''))}
                                                 onChange={(e) => handleNumberInput(e.target.value, (val) => setEditingProcurement({ ...editingProcurement, abc: val as any }))}
                                                 placeholder="5,000,000.00"
-                                                className="bg-[#1e293b] border-slate-700 text-white font-mono"
+                                                className="bg-card border-border text-foreground font-mono"
                                             />
-                                            <p className="text-xs text-slate-500">Amount in Philippine Pesos</p>
+                                            <p className="text-xs text-muted-foreground">Amount in Philippine Pesos</p>
                                         </div>
 
                                         <div className="space-y-2">
-                                            <Label className="text-slate-300">Bid Amount (Contract Price)</Label>
+                                            <Label className="text-muted-foreground">Bid Amount (Contract Price)</Label>
                                             <Input
                                                 type="text"
                                                 value={getDisplayValue(String(editingProcurement.bidAmount || ''))}
                                                 onChange={(e) => handleNumberInput(e.target.value, (val) => setEditingProcurement({ ...editingProcurement, bidAmount: val as any }))}
                                                 placeholder="5,000,000.00"
-                                                className="bg-[#1e293b] border-slate-700 text-white font-mono"
+                                                className="bg-card border-border text-foreground font-mono"
                                             />
-                                            <p className="text-xs text-slate-500">Actual awarded/contract amount</p>
+                                            <p className="text-xs text-muted-foreground">Actual awarded/contract amount</p>
                                         </div>
                                     </div>
 
 
-                                    {/* Supplier/Awarded to - Only for Regular Bidding */}
-                                    {editingProcurement.procurementType === 'Regular Bidding' && (
-                                        <div className="space-y-2">
-                                            <Label className="text-slate-300">Supplier / Awarded to</Label>
-                                            <Input
-                                                value={editingProcurement.supplier || ''}
-                                                onChange={(e) => setEditingProcurement({ ...editingProcurement, supplier: e.target.value })}
-                                                placeholder="Enter supplier or awardee name..."
-                                                className="bg-[#1e293b] border-slate-700 text-white"
-                                            />
-                                        </div>
-                                    )}
+                                    {/* Supplier/Awarded to - All types */}
+                                    <div className="space-y-2">
+                                        <Label className="text-muted-foreground">Supplier / Awarded to <span className="text-muted-foreground text-xs">(Optional)</span></Label>
+                                        <Select
+                                            value={editingProcurement.supplier || 'none'}
+                                            onValueChange={(val) => setEditingProcurement({ ...editingProcurement, supplier: val === 'none' ? '' : val })}
+                                        >
+                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                <SelectValue placeholder="Select Supplier" />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
+                                                <SelectItem value="none" className="text-muted-foreground italic">No Supplier selected</SelectItem>
+                                                {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
+                                                    <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </div>
                             </div>
 
 
                             {/* Monitoring Process (Standard Grid) */}
-                            <div className="bg-[#0f172a] p-4 rounded-lg border border-slate-800 border-l-4 border-l-blue-500 space-y-4  mt-4 mb-4 shadow-sm min-h-[100px]">
-                                <div className="border-b border-slate-800 pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="bg-background p-4 rounded-lg border border-border border-l-4 border-l-blue-500 space-y-4  mt-4 mb-4 shadow-sm min-h-[100px]">
+                                <div className="border-b border-border pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                     <div>
                                         <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                                             <CalendarIcon className="h-4 w-4 text-blue-500" />
                                             Monitoring Process
                                         </h3>
-                                        <p className="text-xs text-slate-400">Update key dates. Use checkboxes to enable/disable steps.</p>
+                                        <p className="text-xs text-muted-foreground">Update key dates. Use checkboxes to enable/disable steps.</p>
                                     </div>
                                     <div className="flex gap-2 shrink-0">
                                         <Button
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                            className="text-[10px] h-6 px-2 bg-slate-800 border-border text-muted-foreground hover:text-white hover:bg-slate-700"
                                             onClick={() => {
                                                 const today = format(new Date(), 'MM/dd/yyyy');
                                                 const isRegular = editingProcurement?.procurementType === 'Regular Bidding';
+                                                const isShopping = editingProcurement?.procurementType === 'Shopping';
                                                 setEditingProcurement(prev => ({
                                                     ...prev!,
-                                                    receivedPrDate: today,
-                                                    prDeliberatedDate: today,
-                                                    publishedDate: today,
+                                                    receivedPrDate: isShopping ? undefined : today,
+                                                    prDeliberatedDate: isShopping ? undefined : today,
+                                                    publishedDate: isShopping ? undefined : today,
+                                                    shoppingReceivedDate: isShopping ? today : undefined,
+                                                    shoppingBudgetCertDate: isShopping ? today : undefined,
+                                                    shoppingRfqDate: isShopping ? today : undefined,
+                                                    shoppingCanvassDate: isShopping ? today : undefined,
+                                                    shoppingAbstractDate: isShopping ? today : undefined,
+                                                    shoppingPurchaseOrderDate: isShopping ? today : undefined,
                                                     ...(isRegular ? {
                                                         preBidDate: today,
                                                         bidOpeningDate: today,
@@ -2755,7 +2840,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         contractDate: today,
                                                         ntpDate: today,
                                                         awardedToDate: today,
-                                                    } : {
+                                                    } : isShopping ? {} : {
                                                         rfqCanvassDate: today,
                                                         rfqOpeningDate: today,
                                                         bacResolutionDate: today,
@@ -2771,7 +2856,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700"
+                                            className="text-[10px] h-6 px-2 bg-slate-800 border-border text-muted-foreground hover:text-white hover:bg-slate-700"
                                             onClick={() => {
                                                 setEditingProcurement(prev => ({
                                                     ...prev!,
@@ -2793,6 +2878,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     rfqOpeningDate: undefined,
                                                     forwardedGsdDate: undefined,
                                                     poNtpForwardedGsdDate: undefined,
+                                                    shoppingReceivedDate: undefined,
+                                                    shoppingBudgetCertDate: undefined,
+                                                    shoppingRfqDate: undefined,
+                                                    shoppingCanvassDate: undefined,
+                                                    shoppingAbstractDate: undefined,
+                                                    shoppingPurchaseOrderDate: undefined,
                                                 }));
                                             }}
                                         >
@@ -2803,13 +2894,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                                 <div className="space-y-4">
                                     {/* Pre-Procurement */}
-                                    <div className="space-y-2">
-                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                            <MonitoringDateField label="Received PR to Action" value={editingProcurement.receivedPrDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, receivedPrDate: d, ...(!d ? { prDeliberatedDate: undefined, publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={false} activeColor="blue" />
-                                            <MonitoringDateField label="PR Deliberated" value={editingProcurement.prDeliberatedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, prDeliberatedDate: d, ...(!d ? { publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.receivedPrDate} activeColor="blue" />
-                                            <MonitoringDateField label="Published" value={editingProcurement.publishedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, publishedDate: d, ...(!d ? { preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.prDeliberatedDate} activeColor="blue" />
+                                    {editingProcurement.procurementType !== 'Shopping' && (
+                                        <div className="space-y-2">
+                                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                <MonitoringDateField label="Received PR to Action" value={editingProcurement.receivedPrDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, receivedPrDate: d, ...(!d ? { prDeliberatedDate: undefined, publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={false} activeColor="blue" />
+                                                <MonitoringDateField label="PR Deliberated" value={editingProcurement.prDeliberatedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, prDeliberatedDate: d, ...(!d ? { publishedDate: undefined, preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.receivedPrDate} activeColor="blue" />
+                                                <MonitoringDateField label="Published" value={editingProcurement.publishedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, publishedDate: d, ...(!d ? { preBidDate: undefined, bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined, rfqCanvassDate: undefined, rfqOpeningDate: undefined, forwardedGsdDate: undefined, poNtpForwardedGsdDate: undefined } : {}) })} disabled={!editingProcurement.prDeliberatedDate} activeColor="blue" />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     {/* Bidding / Canvass */}
                                     <div className="space-y-2">
@@ -2819,6 +2912,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     <MonitoringDateField label="Pre-Bid" value={editingProcurement.preBidDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, preBidDate: d, ...(!d ? { bidOpeningDate: undefined, bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined } : {}) })} disabled={!editingProcurement.publishedDate} activeColor="purple" />
                                                     <MonitoringDateField label="Bid Opening" value={editingProcurement.bidOpeningDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, bidOpeningDate: d, ...(!d ? { bidEvaluationDate: undefined, bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined } : {}) })} disabled={!editingProcurement.preBidDate} activeColor="purple" />
                                                     <MonitoringDateField label="Bid Evaluation Report" value={editingProcurement.bidEvaluationDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, bidEvaluationDate: d, ...(!d ? { bacResolutionDate: undefined, postQualDate: undefined, postQualReportDate: undefined, forwardedOapiDate: undefined, noaDate: undefined, contractDate: undefined, ntpDate: undefined, awardedToDate: undefined } : {}) })} disabled={!editingProcurement.bidOpeningDate} activeColor="purple" />
+                                                </>
+                                            ) : editingProcurement.procurementType === 'Shopping' ? (
+                                                <>
+                                                    <MonitoringDateField label="Received PR to Action" value={editingProcurement.shoppingReceivedDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingReceivedDate: d, ...(!d ? { shoppingBudgetCertDate: undefined, shoppingRfqDate: undefined, shoppingCanvassDate: undefined, shoppingAbstractDate: undefined, shoppingPurchaseOrderDate: undefined } : {}) })} disabled={false} activeColor="amber" />
+                                                    <MonitoringDateField label="Budget Certification (CNAS)" value={editingProcurement.shoppingBudgetCertDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingBudgetCertDate: d, ...(!d ? { shoppingRfqDate: undefined, shoppingCanvassDate: undefined, shoppingAbstractDate: undefined, shoppingPurchaseOrderDate: undefined } : {}) })} disabled={!editingProcurement.shoppingReceivedDate} activeColor="amber" />
+                                                    <MonitoringDateField label="RFQ Preparation" value={editingProcurement.shoppingRfqDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingRfqDate: d, ...(!d ? { shoppingCanvassDate: undefined, shoppingAbstractDate: undefined, shoppingPurchaseOrderDate: undefined } : {}) })} disabled={!editingProcurement.shoppingBudgetCertDate} activeColor="amber" />
+                                                    <MonitoringDateField label="Canvass / Price Inquiry" value={editingProcurement.shoppingCanvassDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingCanvassDate: d, ...(!d ? { shoppingAbstractDate: undefined, shoppingPurchaseOrderDate: undefined } : {}) })} disabled={!editingProcurement.shoppingRfqDate} activeColor="amber" />
+                                                    <MonitoringDateField label="Abstract & LCRB" value={editingProcurement.shoppingAbstractDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingAbstractDate: d, ...(!d ? { shoppingPurchaseOrderDate: undefined } : {}) })} disabled={!editingProcurement.shoppingCanvassDate} activeColor="amber" />
+                                                    <MonitoringDateField label="Purchase Order Issued" value={editingProcurement.shoppingPurchaseOrderDate} onChange={(d: string | undefined) => setEditingProcurement({ ...editingProcurement, shoppingPurchaseOrderDate: d })} disabled={!editingProcurement.shoppingAbstractDate} activeColor="amber" />
                                                 </>
                                             ) : (
                                                 <>
@@ -2852,7 +2954,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     {/* Awarded to (Date + Supplier Name) - Regular Bidding Only */}
                                                     <div className="space-y-1">
                                                         <div className="flex items-center justify-between">
-                                                            <Label className={`text-xs ${!editingProcurement.ntpDate ? 'text-slate-600' : 'text-slate-300'}`}>Awarded Date</Label>
+                                                            <Label className={`text-xs ${!editingProcurement.ntpDate ? 'text-slate-600' : 'text-muted-foreground'}`}>Awarded Date</Label>
                                                             <Checkbox
                                                                 checked={!!editingProcurement.awardedToDate}
                                                                 onCheckedChange={(checked) => {
@@ -2868,21 +2970,28 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                             value={editingProcurement.awardedToDate ? format(new Date(editingProcurement.awardedToDate), 'yyyy-MM-dd') : ''}
                                                             onChange={(e) => setEditingProcurement({ ...editingProcurement, awardedToDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
                                                             disabled={!editingProcurement.ntpDate}
-                                                            className={`bg-[#1e293b] border-slate-700 text-white h-8 text-xs ${!editingProcurement.ntpDate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                            className={`bg-card border-border text-foreground h-8 text-xs ${!editingProcurement.ntpDate ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                         />
                                                     </div>
                                                     <div className="space-y-1">
                                                         <div className="flex items-center justify-between">
-                                                            <Label className={`text-xs ${!editingProcurement.awardedToDate ? 'text-slate-600' : 'text-slate-300'}`}>Supplier</Label>
+                                                            <Label className={`text-xs ${!editingProcurement.awardedToDate ? 'text-slate-600' : 'text-muted-foreground'}`}>Supplier</Label>
                                                         </div>
-                                                        <Input
-                                                            type="text"
-                                                            value={editingProcurement.supplier || ''}
-                                                            onChange={(e) => setEditingProcurement({ ...editingProcurement, supplier: e.target.value })}
-                                                            placeholder="Supplier Name"
+                                                        <Select
+                                                            value={editingProcurement.supplier || 'none'}
+                                                            onValueChange={(val) => setEditingProcurement({ ...editingProcurement, supplier: val === 'none' ? '' : val })}
                                                             disabled={!editingProcurement.awardedToDate || !editingProcurement.ntpDate}
-                                                            className={`bg-[#1e293b] border-slate-700 text-white h-8 text-xs ${!editingProcurement.awardedToDate || !editingProcurement.ntpDate ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                        />
+                                                        >
+                                                            <SelectTrigger className={`bg-card border-border text-foreground h-8 text-xs ${!editingProcurement.awardedToDate || !editingProcurement.ntpDate ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                                                <SelectValue placeholder="Supplier Name" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
+                                                                <SelectItem value="none" className="text-muted-foreground italic text-xs">No Supplier</SelectItem>
+                                                                {[...suppliers].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
+                                                                    <SelectItem key={s.id} value={s.name} className="text-xs">{s.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
                                                 </>
                                             ) : (
@@ -2896,11 +3005,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                             {/* Checklist (Always shown for reference, or user can ignore) */}
                             {editingProcurement && !['Attendance Sheets', 'Others'].includes(editingProcurement.procurementType || '') && (
-                                <div className="bg-[#0f172a] p-4 rounded-lg border border-slate-800 space-y-4">
+                                <div className="bg-background p-4 rounded-lg border border-border space-y-4">
                                     <div className="flex justify-between items-center mb-1">
                                         <div>
                                             <h3 className="text-sm font-semibold text-white">Attached Documents</h3>
-                                            <p className="text-xs text-slate-400">Combined Checklist</p>
+                                            <p className="text-xs text-muted-foreground">Combined Checklist</p>
                                         </div>
                                         <div className="flex gap-2">
                                             {/* Replace the Check All button */}
@@ -2908,7 +3017,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+                                                className="text-[10px] h-6 px-2 bg-slate-800 border-border text-muted-foreground hover:text-white"
                                                 onClick={() => {
                                                     // Create a new checklist object with all items checked
                                                     // Dynamic Check All
@@ -2926,7 +3035,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
-                                                className="text-[10px] h-6 px-2 bg-slate-800 border-slate-700 text-slate-300 hover:text-white"
+                                                className="text-[10px] h-6 px-2 bg-slate-800 border-border text-muted-foreground hover:text-white"
                                                 onClick={() => {
                                                     // Create a new checklist object with all items unchecked
                                                     // Dynamic Clear All
@@ -2944,7 +3053,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     </div>
                                     <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-xs max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                         {checklistItems.map((item) => (
-                                            <div key={item.key} className="flex items-center space-x-2 p-1 rounded hover:bg-slate-800/50">
+                                            <div key={item.key} className="flex items-center space-x-2 p-1 rounded hover:bg-muted/50">
                                                 <Checkbox
                                                     id={`edit-${item.key}`}
                                                     checked={editingProcurement.checklist?.[item.key as keyof typeof editingProcurement.checklist] || false}
@@ -2959,7 +3068,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 />
                                                 <Label
                                                     htmlFor={`edit-${item.key}`}
-                                                    className="text-[10px] leading-none text-slate-300 cursor-pointer"
+                                                    className="text-[10px] leading-none text-muted-foreground cursor-pointer"
                                                 >
                                                     {item.label}
                                                 </Label>
@@ -2972,151 +3081,178 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
 
 
-                            <div className="space-y-4 border-t border-slate-800 pt-4">
-                                <div className="flex items-center justify-between mb-2">
-                                    <Label className="text-lg font-semibold text-white">Location</Label>
-                                    <div className="flex bg-[#1e293b] p-1 rounded-lg border border-slate-700">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                // Switch to Drawer Mode (Clear Box ID)
-                                                setEditingProcurement({ ...editingProcurement, boxId: null, folderId: null });
-                                            }}
-                                            className={`px-3 py-1 text-xs rounded-md transition-all ${!editingProcurement.boxId ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                                        >
-                                            Drawer Storage
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                // Switch to Box Mode (Clear Cabinet/Shelf)
-                                                setEditingProcurement({ ...editingProcurement, cabinetId: null, shelfId: null, folderId: null, boxId: '' });
-                                            }}
-                                            className={`px-3 py-1 text-xs rounded-md transition-all ${editingProcurement.boxId !== null && editingProcurement.boxId !== undefined ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                                        >
-                                            Box Storage
-                                        </button>
-                                    </div>
+                            <div className="space-y-4 border-t border-border pt-4">
+                                <div className="border border-border p-4 rounded-xl bg-slate-800/20 space-y-4 mb-6">
+                                    <Label className="text-muted-foreground">Status / Storage Status</Label>
+                                    <Select 
+                                        value={editingProcurement.status === 'active' ? 'Borrowed' : (editingProcurement.storageStatus || 'Processing')} 
+                                        onValueChange={(val: any) => {
+                                            if (val === 'Borrowed') {
+                                                setEditingProcurement({ ...editingProcurement, status: 'active' });
+                                            } else {
+                                                setEditingProcurement({ ...editingProcurement, status: 'archived', storageStatus: val });
+                                            }
+                                        }}
+                                    >
+                                        <SelectTrigger className="bg-card border-border text-foreground w-full max-w-sm">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-card border-border text-foreground">
+                                            <SelectItem value="Borrowed">Borrowed</SelectItem>
+                                            <SelectItem value="Processing">Processing</SelectItem>
+                                            <SelectItem value="In Storage">In Storage</SelectItem>
+                                            <SelectItem value="Archived">Archived</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+                                {(editingProcurement.storageStatus === 'In Storage' || editingProcurement.storageStatus === 'Archived') && editingProcurement.status !== 'active' && (
+                                    <>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <Label className="text-lg font-semibold text-white">Location</Label>
+                                            <div className="flex bg-card p-1 rounded-lg border border-border">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        // Switch to Drawer Mode (Clear Box ID)
+                                                        setEditingProcurement({ ...editingProcurement, boxId: null, folderId: null });
+                                                    }}
+                                                    className={`px-3 py-1 text-xs rounded-md transition-all ${!editingProcurement.boxId ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                                >
+                                                    Drawer Storage
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        // Switch to Box Mode (Clear Cabinet/Shelf)
+                                                        setEditingProcurement({ ...editingProcurement, cabinetId: null, shelfId: null, folderId: null, boxId: '' });
+                                                    }}
+                                                    className={`px-3 py-1 text-xs rounded-md transition-all ${editingProcurement.boxId !== null && editingProcurement.boxId !== undefined ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                                >
+                                                    Box Storage
+                                                </button>
+                                            </div>
+                                        </div>
 
-                                <div className="animate-in fade-in">
-                                    {editingProcurement.boxId !== null && editingProcurement.boxId !== undefined ? (
-                                        // Box Storage Mode
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-slate-300">Box</Label>
-                                                <Select
-                                                    value={editingProcurement.boxId || ''}
-                                                    onValueChange={(val) => {
-                                                        setEditingProcurement({
-                                                            ...editingProcurement,
-                                                            boxId: val,
-                                                            folderId: null // Reset folder
-                                                        });
-                                                    }}
-                                                >
-                                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                        <SelectValue placeholder="Select Box" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                        {boxes.map((b) => (
-                                                            <SelectItem key={b.id} value={b.id}>{b.code} - {b.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-slate-300">Folder</Label>
-                                                <Select
-                                                    value={editingProcurement.folderId || ''}
-                                                    onValueChange={(val) => setEditingProcurement({ ...editingProcurement, folderId: val })}
-                                                    disabled={!editingProcurement.boxId}
-                                                >
-                                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                        <SelectValue placeholder="Select Folder" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                        {folders.filter(f => f.boxId === editingProcurement.boxId).map((f) => (
-                                                            <SelectItem key={f.id} value={f.id}>{f.code} - {f.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
+                                        <div className="animate-in fade-in">
+                                            {editingProcurement.boxId !== null && editingProcurement.boxId !== undefined ? (
+                                                // Box Storage Mode
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground">Box</Label>
+                                                        <Select
+                                                            value={editingProcurement.boxId || ''}
+                                                            onValueChange={(val) => {
+                                                                setEditingProcurement({
+                                                                    ...editingProcurement,
+                                                                    boxId: val,
+                                                                    folderId: null // Reset folder
+                                                                });
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                                <SelectValue placeholder="Select Box" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground">
+                                                                {boxes.map((b) => (
+                                                                    <SelectItem key={b.id} value={b.id}>{b.code} - {b.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground">Folder in Box (Optional)</Label>
+                                                        <Select
+                                                            value={editingProcurement.folderId || ''}
+                                                            onValueChange={(val) => setEditingProcurement({ ...editingProcurement, folderId: val })}
+                                                            disabled={!editingProcurement.boxId}
+                                                        >
+                                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                                <SelectValue placeholder="Select Folder" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground">
+                                                                {folders.filter(f => f.boxId === editingProcurement.boxId).map((f) => (
+                                                                    <SelectItem key={f.id} value={f.id}>{f.code} - {f.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // Drawer Storage Mode
+                                                <div className="grid grid-cols-3 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground">Drawer</Label>
+                                                        <Select
+                                                            value={editingProcurement.cabinetId || ''}
+                                                            onValueChange={(val) => {
+                                                                setEditingProcurement({
+                                                                    ...editingProcurement,
+                                                                    cabinetId: val,
+                                                                    shelfId: null,
+                                                                    folderId: null
+                                                                });
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                                <SelectValue placeholder="Select Drawer" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground">
+                                                                {cabinets.map((c) => (
+                                                                    <SelectItem key={c.id} value={c.id}>{c.code} - {c.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground">Cabinet</Label>
+                                                        <Select
+                                                            value={editingProcurement.shelfId || ''}
+                                                            onValueChange={(val) => {
+                                                                setEditingProcurement({
+                                                                    ...editingProcurement,
+                                                                    shelfId: val,
+                                                                    folderId: null
+                                                                });
+                                                            }}
+                                                            disabled={!editingProcurement.cabinetId}
+                                                        >
+                                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                                <SelectValue placeholder="Select Cabinet" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground">
+                                                                {shelves.filter(s => s.cabinetId === editingProcurement.cabinetId).map((s) => (
+                                                                    <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label className="text-muted-foreground">Folder (Optional)</Label>
+                                                        <Select
+                                                            value={editingProcurement.folderId || ''}
+                                                            onValueChange={(val) => setEditingProcurement({ ...editingProcurement, folderId: val })}
+                                                            disabled={!editingProcurement.shelfId}
+                                                        >
+                                                            <SelectTrigger className="bg-card border-border text-foreground">
+                                                                <SelectValue placeholder="Select Folder" />
+                                                            </SelectTrigger>
+                                                            <SelectContent className="bg-card border-border text-foreground">
+                                                                {folders.filter(f => f.shelfId === editingProcurement.shelfId && !f.boxId).map((f) => (
+                                                                    <SelectItem key={f.id} value={f.id}>{f.code} - {f.name}</SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    ) : (
-                                        // Drawer Storage Mode
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-slate-300">Drawer</Label>
-                                                <Select
-                                                    value={editingProcurement.cabinetId || ''}
-                                                    onValueChange={(val) => {
-                                                        setEditingProcurement({
-                                                            ...editingProcurement,
-                                                            cabinetId: val,
-                                                            shelfId: null,
-                                                            folderId: null
-                                                        });
-                                                    }}
-                                                >
-                                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                        <SelectValue placeholder="Select Drawer" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                        {cabinets.map((c) => (
-                                                            <SelectItem key={c.id} value={c.id}>{c.code} - {c.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-slate-300">Cabinet</Label>
-                                                <Select
-                                                    value={editingProcurement.shelfId || ''}
-                                                    onValueChange={(val) => {
-                                                        setEditingProcurement({
-                                                            ...editingProcurement,
-                                                            shelfId: val,
-                                                            folderId: null
-                                                        });
-                                                    }}
-                                                    disabled={!editingProcurement.cabinetId}
-                                                >
-                                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                        <SelectValue placeholder="Select Cabinet" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                        {shelves.filter(s => s.cabinetId === editingProcurement.cabinetId).map((s) => (
-                                                            <SelectItem key={s.id} value={s.id}>{s.code} - {s.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-slate-300">Folder</Label>
-                                                <Select
-                                                    value={editingProcurement.folderId || ''}
-                                                    onValueChange={(val) => setEditingProcurement({ ...editingProcurement, folderId: val })}
-                                                    disabled={!editingProcurement.shelfId}
-                                                >
-                                                    <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
-                                                        <SelectValue placeholder="Select Folder" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
-                                                        {folders.filter(f => f.shelfId === editingProcurement.shelfId && !f.boxId).map((f) => (
-                                                            <SelectItem key={f.id} value={f.id}>{f.code} - {f.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                    </>
+                                )}
                             </div>
 
-                            <div className="border-t border-slate-800 pt-4">
+                            <div className="border-t border-border pt-4">
                                 <div className="space-y-2">
-                                    <Label className="text-slate-300">Status</Label>
+                                    <Label className="text-muted-foreground">Status</Label>
                                     <Select
                                         value={editingProcurement.status}
                                         onValueChange={(val) => {
@@ -3134,10 +3270,10 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                             setEditingProcurement(updates);
                                         }}
                                     >
-                                        <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                        <SelectTrigger className="bg-card border-border text-foreground">
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                        <SelectContent className="bg-card border-border text-foreground">
                                             <SelectItem value="archived">Archived (In Storage)</SelectItem>
                                             <SelectItem value="active">Borrowed (Out)</SelectItem>
                                         </SelectContent>
@@ -3159,7 +3295,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                 <Input
                                                     value={editingProcurement.borrowedBy || ''}
                                                     onChange={(e) => setEditingProcurement({ ...editingProcurement, borrowedBy: e.target.value })}
-                                                    className="bg-[#1e293b] border-amber-500/30 text-white focus:border-amber-500"
+                                                    className="bg-card border-amber-500/30 text-white focus:border-amber-500"
                                                     placeholder="Enter borrower name"
                                                 />
                                             </div>
@@ -3169,10 +3305,10 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     value={editingProcurement.borrowerDivision || ''}
                                                     onValueChange={(val) => setEditingProcurement({ ...editingProcurement, borrowerDivision: val })}
                                                 >
-                                                    <SelectTrigger className="bg-[#1e293b] border-amber-500/30 text-white focus:border-amber-500">
+                                                    <SelectTrigger className="bg-card border-amber-500/30 text-white focus:border-amber-500">
                                                         <SelectValue placeholder="Select Division" />
                                                     </SelectTrigger>
-                                                    <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                                    <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                                         {divisions.sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
                                                             <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
                                                         ))}
@@ -3190,7 +3326,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                         ...editingProcurement,
                                                         borrowedDate: e.target.value ? new Date(e.target.value).toISOString() : undefined
                                                     })}
-                                                    className="bg-[#1e293b] border-amber-500/30 text-white focus:border-amber-500"
+                                                    className="bg-card border-amber-500/30 text-white focus:border-amber-500"
                                                 />
                                             </div>
                                             <div className="space-y-2">
@@ -3199,7 +3335,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                                     type="date"
                                                     value={editingProcurement.returnDate ? format(new Date(editingProcurement.returnDate), 'yyyy-MM-dd') : ''}
                                                     onChange={(e) => setEditingProcurement({ ...editingProcurement, returnDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-                                                    className="bg-[#1e293b] border-amber-500/30 text-white focus:border-amber-500"
+                                                    className="bg-card border-amber-500/30 text-white focus:border-amber-500"
                                                 />
                                             </div>
                                         </div>
@@ -3209,24 +3345,24 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
 
                             {/* Record History Section */}
-                            <div className="space-y-4 border-t border-slate-800 pt-4">
+                            <div className="space-y-4 border-t border-border pt-4">
                                 <Label className="text-lg font-semibold text-white">Record History</Label>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Created By</Label>
+                                        <Label className="text-muted-foreground">Created By</Label>
                                         <Input
                                             value={`${editingProcurement.createdByName || 'Unknown'} (${editingProcurement.createdBy || 'N/A'})`}
                                             disabled
-                                            className="bg-[#1e293b]/50 border-slate-700 text-slate-400 cursor-not-allowed"
+                                            className="bg-card/50 border-border text-muted-foreground cursor-not-allowed"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label className="text-slate-300">Created At</Label>
+                                        <Label className="text-muted-foreground">Created At</Label>
                                         <Input
                                             value={format(new Date(editingProcurement.createdAt), 'MMMM d, yyyy - hh:mm a')}
                                             disabled
-                                            className="bg-[#1e293b]/50 border-slate-700 text-slate-400 cursor-not-allowed"
+                                            className="bg-card/50 border-border text-muted-foreground cursor-not-allowed"
                                         />
                                     </div>
                                 </div>
@@ -3235,19 +3371,19 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     editingProcurement.editedBy && (
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
-                                                <Label className="text-slate-300">Last Edited By</Label>
+                                                <Label className="text-muted-foreground">Last Edited By</Label>
                                                 <Input
                                                     value={`${editingProcurement.editedByName || 'Unknown'} (${editingProcurement.editedBy})`}
                                                     disabled
-                                                    className="bg-[#1e293b]/50 border-slate-700 text-slate-400 cursor-not-allowed"
+                                                    className="bg-card/50 border-border text-muted-foreground cursor-not-allowed"
                                                 />
                                             </div>
                                             <div className="space-y-2">
-                                                <Label className="text-slate-300">Last Edited At</Label>
+                                                <Label className="text-muted-foreground">Last Edited At</Label>
                                                 <Input
                                                     value={editingProcurement.lastEditedAt ? format(new Date(editingProcurement.lastEditedAt), 'MMMM d, yyyy - hh:mm a') : 'N/A'}
                                                     disabled
-                                                    className="bg-[#1e293b]/50 border-slate-700 text-slate-400 cursor-not-allowed"
+                                                    className="bg-card/50 border-border text-muted-foreground cursor-not-allowed"
                                                 />
                                             </div>
                                         </div>
@@ -3256,11 +3392,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                             </div>
                         </div>
 
-                        <DialogFooter className="p-6 pt-2 border-t border-slate-800 bg-[#0f172a]">
-                            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="border-slate-700 text-white hover:bg-slate-800">
+                        <DialogFooter className="p-6 pt-2 border-t border-border bg-background">
+                            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)} className="border-border text-white hover:bg-muted">
                                 Cancel
                             </Button>
-                            <Button onClick={handleSaveEdit} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+                            <Button onClick={handleSaveEdit} disabled={isSaving || (editingProcurement?.storageStatus === 'In Storage' && !((!editingProcurement.boxId ? (editingProcurement.cabinetId && editingProcurement.shelfId) : (editingProcurement.boxId))))} className="bg-blue-600 hover:bg-blue-700">
                                 {isSaving ? (
                                     <>
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -3278,16 +3414,16 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
             {/* Return Modal */}
             <Dialog open={!!returnModal} onOpenChange={() => setReturnModal(null)}>
-                <DialogContent className="bg-[#0f172a] border-slate-800 text-white">
+                <DialogContent className="bg-background border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Return File</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Mark this file as returned. Optionally specify who returned it.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label htmlFor="returnedBy" className="text-slate-300">Returned By (Optional)</Label>
+                            <Label htmlFor="returnedBy" className="text-muted-foreground">Returned By (Optional)</Label>
                             <Input
                                 id="returnedBy"
                                 value={returnModal?.returnedBy || ''}
@@ -3295,7 +3431,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     prev ? { ...prev, returnedBy: e.target.value } : null
                                 )}
                                 placeholder="Enter name"
-                                className="bg-[#1e293b] border-slate-700 text-white"
+                                className="bg-card border-border text-foreground"
                             />
                         </div>
                     </div>
@@ -3303,7 +3439,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         <Button
                             variant="outline"
                             onClick={() => setReturnModal(null)}
-                            className="border-slate-700 text-white hover:bg-slate-800"
+                            className="border-border text-white hover:bg-muted"
                         >
                             Cancel
                         </Button>
@@ -3319,16 +3455,16 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
             {/* Borrow Edit Modal */}
             <Dialog open={!!borrowEditModal} onOpenChange={() => setBorrowEditModal(null)}>
-                <DialogContent className="bg-[#0f172a] border-slate-800 text-white">
+                <DialogContent className="bg-background border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Borrow File</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Enter the borrower details.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label htmlFor="borrowedBy" className="text-slate-300">Borrowed By *</Label>
+                            <Label htmlFor="borrowedBy" className="text-muted-foreground">Borrowed By *</Label>
                             <Input
                                 id="borrowedBy"
                                 value={borrowEditModal?.borrowedBy || ''}
@@ -3336,11 +3472,11 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                     prev ? { ...prev, borrowedBy: e.target.value } : null
                                 )}
                                 placeholder="Enter name"
-                                className="bg-[#1e293b] border-slate-700 text-white"
+                                className="bg-card border-border text-foreground"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="borrowedDate" className="text-slate-300">Borrowed Date</Label>
+                            <Label htmlFor="borrowedDate" className="text-muted-foreground">Borrowed Date</Label>
                             <Input
                                 id="borrowedDate"
                                 type="date"
@@ -3348,21 +3484,21 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 onChange={(e) => setBorrowEditModal(prev =>
                                     prev ? { ...prev, borrowedDate: e.target.value ? new Date(e.target.value).toISOString() : undefined } : null
                                 )}
-                                className="bg-[#1e293b] border-slate-700 text-white"
+                                className="bg-card border-border text-foreground"
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="division" className="text-slate-300">Borrower Division *</Label>
+                            <Label htmlFor="division" className="text-muted-foreground">Borrower Division *</Label>
                             <Select
                                 value={borrowEditModal?.borrowerDivision}
                                 onValueChange={(val) => setBorrowEditModal(prev =>
                                     prev ? { ...prev, borrowerDivision: val } : null
                                 )}
                             >
-                                <SelectTrigger className="bg-[#1e293b] border-slate-700 text-white">
+                                <SelectTrigger className="bg-card border-border text-foreground">
                                     <SelectValue placeholder="Select Division" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white h-[200px]">
+                                <SelectContent className="bg-card border-border text-foreground h-[200px]">
                                     {divisions.sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
                                         <SelectItem key={d.id} value={d.name}>{d.name} ({d.abbreviation})</SelectItem>
                                     ))}
@@ -3374,7 +3510,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         <Button
                             variant="outline"
                             onClick={() => setBorrowEditModal(null)}
-                            className="border-slate-700 text-white hover:bg-slate-800"
+                            className="border-border text-white hover:bg-muted"
                         >
                             Cancel
                         </Button>
@@ -3390,25 +3526,25 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
             {/* Export Configuration Dialog */}
             <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen} >
-                <DialogContent className="bg-[#1e293b] border-slate-800 text-white max-w-2xl">
+                <DialogContent className="bg-card border-border text-foreground max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Export CSV Configuration</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Select filters to apply to the exported data.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
                         {/* Storage Status */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Storage Status</Label>
+                            <Label className="text-muted-foreground">Storage Status</Label>
                             <Select
                                 value={exportFilters.storageStatus}
                                 onValueChange={(val) => setExportFilters(prev => ({ ...prev, storageStatus: val }))}
                             >
-                                <SelectTrigger className="bg-[#0f172a] border-slate-700 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="All Status" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     <SelectItem value="all">All Status</SelectItem>
                                     <SelectItem value="borrowed">Borrowed</SelectItem>
                                     <SelectItem value="archived">Archived</SelectItem>
@@ -3418,15 +3554,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* End User (Divisions) */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">End User (Division)</Label>
+                            <Label className="text-muted-foreground">End User (Division)</Label>
                             <Select
                                 value={exportFilters.division}
                                 onValueChange={(val) => setExportFilters(prev => ({ ...prev, division: val }))}
                             >
-                                <SelectTrigger className="bg-[#0f172a] border-slate-700 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="All Divisions" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                     <SelectItem value="all">All Divisions</SelectItem>
                                     {divisions.map((d) => (
                                         <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>
@@ -3437,15 +3573,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* Date (Year) */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Date (Year)</Label>
+                            <Label className="text-muted-foreground">Date (Year)</Label>
                             <Select
                                 value={exportFilters.year}
                                 onValueChange={(val) => setExportFilters(prev => ({ ...prev, year: val }))}
                             >
-                                <SelectTrigger className="bg-[#0f172a] border-slate-700 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="All Years" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[200px]">
+                                <SelectContent className="bg-card border-border text-foreground max-h-[200px]">
                                     <SelectItem value="all">All Years</SelectItem>
                                     {availableExportYears.map((y) => (
                                         <SelectItem key={y} value={y}>{y}</SelectItem>
@@ -3456,12 +3592,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* Range of ABC */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Range of ABC</Label>
+                            <Label className="text-muted-foreground">Range of ABC</Label>
                             <div className="flex gap-2">
                                 <Input
                                     type="number"
                                     placeholder="Min ABC"
-                                    className="bg-[#0f172a] border-slate-700 text-white h-9"
+                                    className="bg-background border-border text-foreground h-9"
                                     value={exportFilters.abcRange.min}
                                     onChange={(e) => setExportFilters(prev => ({
                                         ...prev,
@@ -3471,7 +3607,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 <Input
                                     type="number"
                                     placeholder="Max ABC"
-                                    className="bg-[#0f172a] border-slate-700 text-white h-9"
+                                    className="bg-background border-border text-foreground h-9"
                                     value={exportFilters.abcRange.max}
                                     onChange={(e) => setExportFilters(prev => ({
                                         ...prev,
@@ -3483,12 +3619,12 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* Range of Bid Amount */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Range of Bid Amount</Label>
+                            <Label className="text-muted-foreground">Range of Bid Amount</Label>
                             <div className="flex gap-2">
                                 <Input
                                     type="number"
                                     placeholder="Min Bid"
-                                    className="bg-[#0f172a] border-slate-700 text-white h-9"
+                                    className="bg-background border-border text-foreground h-9"
                                     value={exportFilters.bidAmountRange.min}
                                     onChange={(e) => setExportFilters(prev => ({
                                         ...prev,
@@ -3498,7 +3634,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 <Input
                                     type="number"
                                     placeholder="Max Bid"
-                                    className="bg-[#0f172a] border-slate-700 text-white h-9"
+                                    className="bg-background border-border text-foreground h-9"
                                     value={exportFilters.bidAmountRange.max}
                                     onChange={(e) => setExportFilters(prev => ({
                                         ...prev,
@@ -3510,15 +3646,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* Storage Location */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Storage Location</Label>
+                            <Label className="text-muted-foreground">Storage Location</Label>
                             <Select
                                 value={exportFilters.storageLocation}
                                 onValueChange={(val) => setExportFilters(prev => ({ ...prev, storageLocation: val }))}
                             >
-                                <SelectTrigger className="bg-[#0f172a] border-slate-700 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="All Storage" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white">
+                                <SelectContent className="bg-card border-border text-foreground">
                                     <SelectItem value="all">All Storage</SelectItem>
                                     <SelectItem value="drawers">Drawers only</SelectItem>
                                     <SelectItem value="boxes">Boxes only</SelectItem>
@@ -3528,18 +3664,18 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
                         {/* Process Status */}
                         <div className="space-y-2">
-                            <Label className="text-slate-300">Process Status</Label>
+                            <Label className="text-muted-foreground">Process Status</Label>
                             <Select
                                 value={exportFilters.processStatus}
                                 onValueChange={(val) => setExportFilters(prev => ({ ...prev, processStatus: val }))}
                             >
-                                <SelectTrigger className="bg-[#0f172a] border-slate-700 text-white">
+                                <SelectTrigger className="bg-background border-border text-foreground">
                                     <SelectValue placeholder="All Status" />
                                 </SelectTrigger>
-                                <SelectContent className="bg-[#1e293b] border-slate-700 text-white max-h-[250px]">
+                                <SelectContent className="bg-card border-border text-foreground max-h-[250px]">
                                     <SelectItem value="all">All Process Status</SelectItem>
                                     <SelectItem value="Completed">Completed</SelectItem>
-                                    <SelectItem value="In Progress">In Progress</SelectItem>
+                                    <SelectItem value="Processing">Processing</SelectItem>
                                     <SelectItem value="Returned PR to EU">Returned PR to EU</SelectItem>
                                     <SelectItem value="Not yet Acted">Not yet Acted</SelectItem>
                                     <SelectItem value="Failure">Failure</SelectItem>
@@ -3549,7 +3685,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsExportModalOpen(false)} className="border-slate-700 text-white hover:bg-slate-800">
+                        <Button variant="outline" onClick={() => setIsExportModalOpen(false)} className="border-border text-white hover:bg-muted">
                             Cancel
                         </Button>
                         <Button onClick={handleExportConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -3566,29 +3702,29 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
             />
             {/* Relocate/Reorder Dialog */}
             <Dialog open={isRelocateDialogOpen} onOpenChange={setIsRelocateDialogOpen}>
-                <DialogContent className="bg-[#1e293b] border-slate-800 text-white">
+                <DialogContent className="bg-card border-border text-foreground">
                     <DialogHeader>
                         <DialogTitle>Relocate / Reorder</DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Enter the new stack number for this document.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="stack-number" className="text-right text-slate-300">Stack #</Label>
+                            <Label htmlFor="stack-number" className="text-right text-muted-foreground">Stack #</Label>
                             <Input
                                 id="stack-number"
                                 type="number"
                                 value={newStackNumber}
                                 onChange={(e) => setNewStackNumber(e.target.value ? parseInt(e.target.value) : '')}
-                                className="col-span-3 bg-[#0f172a] border-slate-700 text-white"
+                                className="col-span-3 bg-background border-border text-foreground"
                                 placeholder="Enter stack number"
                                 autoFocus
                             />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsRelocateDialogOpen(false)} className="border-slate-700 text-white hover:bg-slate-800">
+                        <Button variant="outline" onClick={() => setIsRelocateDialogOpen(false)} className="border-border text-white hover:bg-muted">
                             Cancel
                         </Button>
                         <Button onClick={handleRelocateSave} className="bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -3600,13 +3736,13 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
 
             {/* Import Result Modal */}
             <Dialog open={isImportResultOpen} onOpenChange={setIsImportResultOpen}>
-                <DialogContent className="bg-[#1e293b] border-slate-800 text-white max-w-lg">
+                <DialogContent className="bg-card border-border text-foreground max-w-lg">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2 text-xl">
                             <Upload className="h-5 w-5 text-violet-400" />
                             Import Complete
                         </DialogTitle>
-                        <DialogDescription className="text-slate-400">
+                        <DialogDescription className="text-muted-foreground">
                             Summary of CSV import results.
                         </DialogDescription>
                     </DialogHeader>
@@ -3616,15 +3752,15 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                         <div className="grid grid-cols-3 gap-3 text-center">
                             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
                                 <p className="text-2xl font-bold text-emerald-400">{importResults.imported}</p>
-                                <p className="text-xs text-slate-400 mt-1">Imported</p>
+                                <p className="text-xs text-muted-foreground mt-1">Imported</p>
                             </div>
                             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                                 <p className="text-2xl font-bold text-amber-400">{importResults.skipped.length}</p>
-                                <p className="text-xs text-slate-400 mt-1">Skipped (Duplicates)</p>
+                                <p className="text-xs text-muted-foreground mt-1">Skipped (Duplicates)</p>
                             </div>
                             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
                                 <p className="text-2xl font-bold text-red-400">{importResults.errors.length}</p>
-                                <p className="text-xs text-slate-400 mt-1">Errors</p>
+                                <p className="text-xs text-muted-foreground mt-1">Errors</p>
                             </div>
                         </div>
 
@@ -3636,7 +3772,7 @@ const ProcurementList: React.FC<ProcurementListProps> = ({ forcedType, pageTitle
                                 </p>
                                 <div className="max-h-28 overflow-y-auto space-y-1">
                                     {importResults.skipped.map((pr, i) => (
-                                        <p key={i} className="text-xs text-slate-300 font-mono">{pr}</p>
+                                        <p key={i} className="text-xs text-muted-foreground font-mono">{pr}</p>
                                     ))}
                                 </div>
                             </div>

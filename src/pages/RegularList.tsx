@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import ProcurementList from './ProcurementList';
 
 const RegularList: React.FC = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,10 +43,10 @@ const Login: React.FC = () => {
 
   if (authLoading || (user && !error && !isLoading)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0f172a] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
-          <p className="text-slate-400">Loading session...</p>
+          <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">Loading session...</p>
         </div>
       </div>
     );
